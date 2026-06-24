@@ -7,6 +7,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import AdminCampaigns from "./pages/admin/AdminCampaigns";
 import AdminMembers from "./pages/admin/AdminMembers";
 import AdminParticipations from "./pages/admin/AdminParticipations";
+import BusinessDashboard from "./pages/business/BusinessDashboard";
 import Campaigns from "./pages/Campaigns";
 import Home from "./pages/Home";
 import MyActivity from "./pages/MyActivity";
@@ -47,6 +48,7 @@ function Router() {
       <Route path="/" component={() => <ProtectedRoute component={Home} />} />
       <Route path="/campaigns" component={() => <ProtectedRoute component={Campaigns} />} />
       <Route path="/my" component={() => <ProtectedRoute component={MyActivity} />} />
+      <Route path="/business" component={() => <ProtectedRoute component={BusinessDashboard} />} />
       <Route path="/admin" component={() => <ProtectedRoute component={AdminCampaigns} />} />
       <Route path="/admin/participations" component={() => <ProtectedRoute component={AdminParticipations} />} />
       <Route path="/admin/members" component={() => <ProtectedRoute component={AdminMembers} />} />

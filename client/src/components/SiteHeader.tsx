@@ -8,16 +8,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ClipboardList, LayoutDashboard, LogOut, Menu, UserRound } from "lucide-react";
+import { Building2, ClipboardList, LayoutDashboard, LogOut, Menu, UserRound } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import BrandLogo from "@/components/BrandLogo";
 
 type NavLink = { label: string; href: string };
 
-const AUTH_NAV_LINKS: NavLink[] = [
+const REVIEWER_NAV_LINKS: NavLink[] = [
   { label: "진행 중인 캠페인", href: "/campaigns" },
   { label: "내 활동", href: "/my" },
+];
+const BUSINESS_NAV_LINKS: NavLink[] = [
+  { label: "내 캠페인", href: "/business" },
 ];
 
 export default function SiteHeader() {
@@ -25,17 +28,18 @@ export default function SiteHeader() {
   const [open, setOpen] = useState(false);
 
   const initial = (user?.fullName || user?.name || "리").charAt(0);
+  const navLinks = user?.role === "business" ? BUSINESS_NAV_LINKS : REVIEWER_NAV_LINKS;
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="container flex h-16 items-center justify-between gap-4">
-        <Link href="/">
+        <Link href={user?.role === "business" ? "/business" : "/"}>
           <BrandLogo size={38} textClassName="text-lg" />
         </Link>
 
         {isAuthenticated && (
           <nav className="hidden items-center gap-8 md:flex">
-            {AUTH_NAV_LINKS.map(link => (
+            {navLinks.map(link => (
               <Link
                 key={link.href}
                 href={link.href}
@@ -68,18 +72,29 @@ export default function SiteHeader() {
                   {user?.fullName || user?.name}님
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/campaigns">
-                    <ClipboardList className="mr-2 h-4 w-4" />
-                    캠페인 둘러보기
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/my">
-                    <UserRound className="mr-2 h-4 w-4" />
-                    내 활동
-                  </Link>
-                </DropdownMenuItem>
+                {user?.role === "business" ? (
+                  <DropdownMenuItem asChild>
+                    <Link href="/business">
+                      <Building2 className="mr-2 h-4 w-4" />
+                      내 캠페인
+                    </Link>
+                  </DropdownMenuItem>
+                ) : (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link href="/campaigns">
+                        <ClipboardList className="mr-2 h-4 w-4" />
+                        캠페인 둘러보기
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/my">
+                        <UserRound className="mr-2 h-4 w-4" />
+                        내 활동
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
                 {user?.role === "admin" && (
                   <DropdownMenuItem asChild>
                     <Link href="/admin">
@@ -120,7 +135,7 @@ export default function SiteHeader() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52">
-                {AUTH_NAV_LINKS.map(link => (
+                {navLinks.map(link => (
                   <DropdownMenuItem key={link.href} asChild>
                     <Link href={link.href}>{link.label}</Link>
                   </DropdownMenuItem>

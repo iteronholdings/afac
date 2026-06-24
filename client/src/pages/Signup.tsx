@@ -59,6 +59,10 @@ export default function Signup() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!role) {
+      toast.error("리뷰어 또는 업체를 먼저 선택해 주세요.");
+      return;
+    }
     if (!form.loginId || !form.password || !form.fullName || !form.phone) {
       toast.error("모든 항목을 입력해 주세요.");
       return;

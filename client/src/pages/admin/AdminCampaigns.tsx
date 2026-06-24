@@ -112,12 +112,16 @@ export default function AdminCampaigns() {
                 )}
                 <span
                   className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                    c.status === "open"
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "bg-muted text-muted-foreground"
+                    c.status === "open" ? "bg-primary text-primary-foreground shadow-sm"
+                    : c.status === "pending" ? "bg-yellow-400 text-yellow-900"
+                    : c.status === "rejected" ? "bg-destructive/80 text-white"
+                    : "bg-muted text-muted-foreground"
                   }`}
                 >
-                  {c.status === "open" ? "모집 중" : "마감"}
+                  {c.status === "open" ? "모집 중"
+                    : c.status === "pending" ? "승인 대기"
+                    : c.status === "rejected" ? "반려"
+                    : "마감"}
                 </span>
               </div>
 
@@ -153,6 +157,27 @@ export default function AdminCampaigns() {
                 </div>
 
                 <div className="mt-auto flex flex-col gap-2 pt-1">
+                  {c.status === "pending" ? (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1"
+                        disabled={setStatusMutation.isPending}
+                        onClick={() => setStatusMutation.mutate({ id: c.id, status: "open" })}
+                      >
+                        승인
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex-1 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        disabled={setStatusMutation.isPending}
+                        onClick={() => setStatusMutation.mutate({ id: c.id, status: "rejected" })}
+                      >
+                        반려
+                      </Button>
+                    </div>
+                  ) : (
                   <div className="flex gap-2">
                     <Button
                       variant="outline"
@@ -177,6 +202,7 @@ export default function AdminCampaigns() {
                       {c.status === "open" ? "모집 마감" : "모집 재개"}
                     </Button>
                   </div>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"

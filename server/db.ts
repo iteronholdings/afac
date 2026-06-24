@@ -226,6 +226,26 @@ export async function listCampaigns(opts?: { onlyOpen?: boolean }) {
   return db.select().from(campaigns).orderBy(desc(campaigns.createdAt));
 }
 
+export async function listCampaignsByOwner(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(campaigns)
+    .where(eq(campaigns.createdBy, userId))
+    .orderBy(desc(campaigns.createdAt));
+}
+
+export async function listParticipationsByCampaign(campaignId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(participations)
+    .where(eq(participations.campaignId, campaignId))
+    .orderBy(desc(participations.appliedAt));
+}
+
 /** Count active (non-rejected) participations for a campaign — used for slot availability. */
 export async function countActiveParticipations(campaignId: number) {
   const db = await getDb();

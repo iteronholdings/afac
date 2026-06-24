@@ -27,6 +27,16 @@ const requireUser = t.middleware(async opts => {
 
 export const protectedProcedure = t.procedure.use(requireUser);
 
+export const businessProcedure = t.procedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+    if (!ctx.user || (ctx.user.role !== "business" && ctx.user.role !== "admin")) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "업체 계정이 필요합니다." });
+    }
+    return next({ ctx: { ...ctx, user: ctx.user } });
+  }),
+);
+
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;

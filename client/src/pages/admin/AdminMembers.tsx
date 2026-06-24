@@ -103,6 +103,10 @@ export default function AdminMembers() {
                       <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
                         <ShieldCheck className="h-3.5 w-3.5" /> 관리자
                       </span>
+                    ) : m.role === "business" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                        업체
+                      </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
                         리뷰어

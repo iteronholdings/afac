@@ -29,13 +29,18 @@ import {
   Users,
   Wallet,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 
 export default function Home() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
+
+  // 업체 계정이면 업체 대시보드로 이동
+  useEffect(() => {
+    if (user?.role === "business") navigate("/business");
+  }, [user?.role, navigate]);
   const utils = trpc.useUtils();
 
   const { data: campaigns, isLoading: campaignsLoading } = trpc.campaign.listOpen.useQuery();

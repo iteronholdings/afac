@@ -59,9 +59,9 @@ export const campaigns = mysqlTable("campaigns", {
   commission: int("commission").notNull().default(0),
   /** Number of reviewer slots (모집 인원). */
   slots: int("slots").notNull().default(1),
-  /** open: 모집 중, closed: 마감. */
-  status: mysqlEnum("status", ["open", "closed"]).default("open").notNull(),
-  /** Admin (user.id) who created this campaign. */
+  /** pending: 업체 신청 대기, open: 모집 중, closed: 마감, rejected: 반려. */
+  status: mysqlEnum("status", ["pending", "open", "closed", "rejected"]).default("open").notNull(),
+  /** User.id who created/requested this campaign (admin or business). */
   createdBy: int("createdBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
