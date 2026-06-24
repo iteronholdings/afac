@@ -25,28 +25,45 @@ export function ImageUploader({
   const inputRef = useRef<HTMLInputElement>(null);
   const uploadMutation = trpc.upload.image.useMutation();
 
+  const compressImage = (file: File, maxPx = 1200, quality = 0.75): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = () => {
+        const img = new Image();
+        img.onerror = reject;
+        img.onload = () => {
+          const scale = Math.min(1, maxPx / Math.max(img.width, img.height));
+          const w = Math.round(img.width * scale);
+          const h = Math.round(img.height * scale);
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        };
+        img.src = reader.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+
   const handleFile = async (file: File) => {
     if (!ALLOWED.includes(file.type as AllowedMime)) {
       toast.error("PNG, JPG, WEBP, GIF 이미지만 업로드할 수 있습니다.");
       return;
     }
-    if (file.size > 6 * 1024 * 1024) {
-      toast.error("이미지 용량은 6MB 이하여야 합니다.");
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("이미지 용량은 20MB 이하여야 합니다.");
       return;
     }
 
     setUploading(true);
     try {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      const dataUrl = await compressImage(file);
 
       const res = await uploadMutation.mutateAsync({
         dataUrl,
-        mimeType: file.type as AllowedMime,
+        mimeType: "image/jpeg",
         purpose,
       });
       onChange(res.url);

@@ -16,6 +16,18 @@ const campaignInput = z.object({
 });
 
 export const campaignRouter = router({
+  // Public: list open campaigns for homepage preview (max 3).
+  listPreview: publicProcedure.query(async () => {
+    const rows = await db.listCampaigns({ onlyOpen: true });
+    const withCounts = await Promise.all(
+      rows.slice(0, 3).map(async c => {
+        const taken = await db.countActiveParticipations(c.id);
+        return { ...c, taken, remaining: Math.max(0, c.slots - taken) };
+      })
+    );
+    return withCounts;
+  }),
+
   // Protected: list open campaigns for reviewers (with remaining slots).
   // 로그인 사용자만 목록 조회 가능.
   listOpen: protectedProcedure.query(async () => {

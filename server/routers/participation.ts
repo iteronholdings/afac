@@ -49,6 +49,24 @@ export const participationRouter = router({
       });
     }),
 
+  // Reviewer: upload search proof → status searched.
+  submitSearchProof: protectedProcedure
+    .input(z.object({ participationId: z.number().int(), proofUrl: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const p = await db.getParticipationById(input.participationId);
+      if (!p || p.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "참여 내역을 찾을 수 없습니다." });
+      }
+      if (!["applied", "searched"].includes(p.status)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "현재 단계에서는 검색 인증을 등록할 수 없습니다." });
+      }
+      return db.updateParticipation(input.participationId, {
+        searchProofUrl: input.proofUrl,
+        status: "searched",
+        searchedAt: new Date(),
+      });
+    }),
+
   // Reviewer: upload purchase proof → status purchased.
   submitPurchaseProof: protectedProcedure
     .input(z.object({ participationId: z.number().int(), proofUrl: z.string().min(1) }))
@@ -57,8 +75,8 @@ export const participationRouter = router({
       if (!p || p.userId !== ctx.user.id) {
         throw new TRPCError({ code: "NOT_FOUND", message: "참여 내역을 찾을 수 없습니다." });
       }
-      if (!["applied", "purchased"].includes(p.status)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "현재 단계에서는 구매 인증을 등록할 수 없습니다." });
+      if (!["searched", "purchased"].includes(p.status)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "검색 인증 후에 구매 인증을 등록할 수 있습니다." });
       }
       return db.updateParticipation(input.participationId, {
         purchaseProofUrl: input.proofUrl,
@@ -110,7 +128,7 @@ export const participationRouter = router({
     .input(
       z.object({
         participationId: z.number().int(),
-        status: z.enum(["applied", "purchased", "reviewed", "approved", "paid", "rejected"]),
+        status: z.enum(["applied", "searched", "purchased", "reviewed", "approved", "paid", "rejected"]),
         adminMemo: z.string().max(1000).optional(),
       })
     )

@@ -1,336 +1,299 @@
-import SiteHeader from "@/components/SiteHeader";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Badge } from "@/components/ui/badge";
+import CampaignCard from "@/components/CampaignCard";
+import SiteHeader from "@/components/SiteHeader";
+import WorkflowStepper from "@/components/WorkflowStepper";
 import { Button } from "@/components/ui/button";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { trpc } from "@/lib/trpc";
+import {
+  formatKRW,
+  ParticipationStatus,
+  STATUS_BADGE,
+  STATUS_LABEL,
+  totalPayout,
+} from "@/lib/workflow";
 import {
   ArrowRight,
-  BadgeCheck,
+  CheckCircle2,
   ClipboardList,
-  Coins,
-  LayoutDashboard,
-  PenLine,
-  ShieldCheck,
-  ShoppingBag,
+  ImageIcon,
+  Search,
+  Sparkles,
+  Users,
+  Wallet,
 } from "lucide-react";
-import { Link } from "wouter";
-import BrandLogo from "@/components/BrandLogo";
-
-const STEPS = [
-  {
-    icon: ClipboardList,
-    title: "체험단 신청 · 구매",
-    desc: "원하는 캠페인을 골라 신청하고\n상품을 구매합니다.",
-  },
-  {
-    icon: PenLine,
-    title: "리뷰 작성",
-    desc: "상품을 사용해 본 뒤\n솔직한 리뷰를 등록합니다.",
-  },
-  {
-    icon: BadgeCheck,
-    title: "리뷰 확인",
-    desc: "등록된 리뷰를 검수하여\n승인 여부를 확정합니다.",
-  },
-  {
-    icon: Coins,
-    title: "수수료 지급",
-    desc: "확인이 완료되면\n수수료가 지급됩니다.",
-  },
-];
-
-const CAMPAIGNS = [
-  {
-    tag: "뷰티",
-    title: "수분 진정 토너패드",
-    reward: "12,000원",
-    price: "19,900원",
-    slots: "선착순 40명",
-    accent: "from-[oklch(0.93_0.05_175)] to-[oklch(0.95_0.04_150)]",
-  },
-  {
-    tag: "리빙",
-    title: "프리미엄 디퓨저 세트",
-    reward: "15,000원",
-    price: "29,000원",
-    slots: "선착순 25명",
-    accent: "from-[oklch(0.94_0.04_200)] to-[oklch(0.95_0.04_185)]",
-  },
-  {
-    tag: "푸드",
-    title: "유기농 곡물 그래놀라",
-    reward: "8,000원",
-    price: "14,500원",
-    slots: "선착순 60명",
-    accent: "from-[oklch(0.95_0.045_160)] to-[oklch(0.96_0.03_175)]",
-  },
-];
-
-const FAQS = [
-  {
-    q: "수수료는 언제 지급되나요?",
-    a: "작성하신 리뷰가 검수를 통과해 '확인 완료' 상태가 되면, 등록하신 정보로 수수료가 지급됩니다.",
-  },
-  {
-    q: "리뷰는 어디에 작성하나요?",
-    a: "캠페인 상세 페이지의 안내에 따라 지정된 채널에 리뷰를 작성한 뒤, 링크 또는 캡처를 제출하시면 됩니다.",
-  },
-  {
-    q: "회원가입에는 어떤 정보가 필요한가요?",
-    a: "아이디, 비밀번호, 성명, 전화번호만 입력하면 간단하게 가입할 수 있습니다.",
-  },
-];
-
-function comingSoon() {
-  // Placeholder action for not-yet-built campaign detail flow.
-  import("sonner").then(({ toast }) =>
-    toast.info("캠페인 상세 기능은 곧 제공될 예정입니다.")
-  );
-}
+import { useState } from "react";
+import { toast } from "sonner";
+import { Link, useLocation } from "wouter";
 
 export default function Home() {
-  const { isAuthenticated, user } = useAuth();
+  const { user } = useAuth();
+  const [, navigate] = useLocation();
+  const utils = trpc.useUtils();
+
+  const { data: campaigns, isLoading: campaignsLoading } = trpc.campaign.listOpen.useQuery();
+  const { data: myParts, isLoading: partsLoading } = trpc.participation.mine.useQuery();
+
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const selected = campaigns?.find(c => c.id === selectedId) ?? null;
+
+  const joinedCampaignIds = new Set(
+    (myParts ?? []).filter(p => p.status !== "rejected").map(p => p.campaignId)
+  );
+
+  const joinMutation = trpc.participation.join.useMutation({
+    onSuccess: () => {
+      utils.participation.mine.invalidate();
+      utils.campaign.listOpen.invalidate();
+      toast.success("참여 신청 완료! 아래 '내 활동'에서 진행해 주세요.");
+      setSelectedId(null);
+    },
+    onError: err => toast.error(err.message),
+  });
 
   return (
-    <div className="min-h-screen bg-soft-gradient">
+    <div className="min-h-screen bg-gradient-to-b from-secondary/40 to-background">
       <SiteHeader />
 
-      {/* Hero */}
-      <section className="container pb-16 pt-14 sm:pt-20">
-        <div className="mx-auto max-w-3xl text-center">
-          <h1 className="text-balance text-4xl font-extrabold leading-tight tracking-tight text-foreground sm:text-5xl">
-            진심 어린 리뷰가
-            <br />
-            <span className="text-gradient">정당한 보상</span>이 됩니다
-          </h1>
+      <main className="container max-w-5xl py-10 space-y-14">
 
-          <p className="mx-auto mt-5 max-w-xl text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg">
-            체험단을 신청하고 상품을 사용해 본 뒤 리뷰를 남겨 보세요.{" "}
-            <br className="hidden sm:block" />
-            리뷰가 확인되면 수수료를 지급해 드립니다.
-          </p>
-
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            {isAuthenticated ? (
-              <>
-                <a href="#campaigns">
-                  <Button
-                    size="lg"
-                    className="h-12 rounded-full px-7 text-base font-semibold"
-                  >
-                    캠페인 둘러보기
-                    <ArrowRight className="ml-1.5 h-4 w-4" />
-                  </Button>
-                </a>
-                <span className="text-sm text-muted-foreground">
-                  {user?.fullName || user?.name}님, 환영합니다.
-                </span>
-              </>
-            ) : (
-              <>
-                <Link href="/signup">
-                  <Button
-                    size="lg"
-                    className="h-12 rounded-full px-7 text-base font-semibold"
-                  >
-                    지금 시작하기
-                    <ArrowRight className="ml-1.5 h-4 w-4" />
-                  </Button>
-                </Link>
-                <Link href="/login">
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="h-12 rounded-full border-border bg-card px-7 text-base font-semibold"
-                  >
-                    로그인
-                  </Button>
-                </Link>
-              </>
-            )}
-          </div>
-
-          <div className="mt-7 flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <ShieldCheck className="h-4 w-4 text-primary" />
-            안전한 정산 · 투명한 검수 절차
-          </div>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section id="how-it-works" className="container scroll-mt-20 py-16">
-        <div className="mx-auto mb-12 max-w-2xl text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-foreground">
-            이렇게 진행됩니다
-          </h2>
-          <p className="mt-3 text-muted-foreground">
-            신청부터 수수료 지급까지, 단 네 단계입니다.
-          </p>
-        </div>
-
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {STEPS.map((step, idx) => (
-            <div
-              key={step.title}
-              className="group relative rounded-3xl border border-border/70 bg-card/80 p-6 shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
-            >
-              <span className="absolute right-5 top-5 text-sm font-bold text-muted-foreground/40">
-                0{idx + 1}
+        {/* 진행 중인 캠페인 */}
+        <section>
+          <div className="mb-6 flex items-end justify-between gap-3">
+            <div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary mb-2">
+                <Sparkles className="h-3.5 w-3.5" /> 진행 중인 캠페인
               </span>
-              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                <step.icon className="h-6 w-6" />
-              </div>
-              <h3 className="mb-2 text-lg font-bold text-foreground">
-                {step.title}
-              </h3>
-              <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-                {step.desc}
-              </p>
+              <h2 className="text-2xl font-bold text-foreground">
+                {user?.fullName || user?.name}님, 참여할 캠페인을 골라보세요
+              </h2>
             </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Campaigns - 로그인한 사용자에게만 노출 */}
-      {isAuthenticated && (
-      <section id="campaigns" className="container scroll-mt-20 py-16">
-        <div className="mb-10 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h2 className="text-3xl font-bold tracking-tight text-foreground">
-              진행 중인 캠페인
-            </h2>
-            <p className="mt-3 text-muted-foreground">
-              마음에 드는 상품을 골라 리뷰어로 참여해 보세요.
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            className="font-medium text-primary"
-            onClick={comingSoon}
-          >
-            전체 보기
-            <ArrowRight className="ml-1 h-4 w-4" />
-          </Button>
-        </div>
-
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {CAMPAIGNS.map(c => (
-            <div
-              key={c.title}
-              className="overflow-hidden rounded-3xl border border-border/70 bg-card shadow-sm transition-all hover:-translate-y-1 hover:shadow-md"
-            >
-              <div
-                className={`relative flex h-40 items-center justify-center bg-gradient-to-br ${c.accent}`}
-              >
-                <ShoppingBag className="h-12 w-12 text-foreground/30" />
-                <Badge className="absolute left-4 top-4 rounded-full bg-card/90 text-foreground hover:bg-card/90">
-                  {c.tag}
-                </Badge>
-              </div>
-              <div className="p-5">
-                <h3 className="text-lg font-bold text-foreground">{c.title}</h3>
-                <div className="mt-3 flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">상품가</span>
-                  <span className="font-medium text-foreground">{c.price}</span>
-                </div>
-                <div className="mt-1.5 flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">리뷰 수수료</span>
-                  <span className="font-bold text-primary">{c.reward}</span>
-                </div>
-                <div className="mt-4 flex items-center justify-between">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {c.slots}
-                  </span>
-                  <Button
-                    size="sm"
-                    className="rounded-full font-semibold"
-                    onClick={comingSoon}
-                  >
-                    신청하기
-                  </Button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-      )}
-
-      {/* CTA banner */}
-      <section className="container py-12">
-        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-primary to-[oklch(0.55_0.12_165)] px-8 py-12 text-center text-primary-foreground shadow-lg sm:px-12">
-          <h2 className="text-2xl font-bold sm:text-3xl">
-            지금 바로 리뷰어로 시작하세요
-          </h2>
-          <p className="mx-auto mt-3 max-w-md text-primary-foreground/85">
-            가입은 1분이면 충분합니다.
-            <br className="hidden sm:block" />
-            아이디와 간단한 정보만 입력하면 됩니다.
-          </p>
-          {!isAuthenticated && (
-            <Link href="/signup">
-              <Button
-                size="lg"
-                variant="secondary"
-                className="mt-7 h-12 rounded-full bg-card px-8 text-base font-semibold text-foreground hover:bg-card/90"
-              >
-                무료로 회원가입
-                <ArrowRight className="ml-1.5 h-4 w-4" />
+            <Link href="/campaigns">
+              <Button variant="ghost" size="sm" className="shrink-0 text-primary font-medium">
+                전체 보기 <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             </Link>
+          </div>
+
+          {campaignsLoading ? (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-72 animate-pulse rounded-3xl bg-muted" />
+              ))}
+            </div>
+          ) : !campaigns || campaigns.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 rounded-3xl border border-dashed border-border bg-card py-14 text-center">
+              <ImageIcon className="h-8 w-8 text-muted-foreground" />
+              <p className="font-medium text-muted-foreground">현재 모집 중인 캠페인이 없습니다</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {campaigns.slice(0, 6).map(c => {
+                const joined = joinedCampaignIds.has(c.id);
+                return (
+                  <CampaignCard
+                    key={c.id}
+                    campaign={c}
+                    onClick={() => setSelectedId(c.id)}
+                    footer={
+                      joined ? (
+                        <Button variant="outline" className="w-full bg-card" disabled>
+                          <CheckCircle2 className="mr-1.5 h-4 w-4 text-primary" /> 참여 중
+                        </Button>
+                      ) : (
+                        <Button
+                          className="w-full rounded-xl font-semibold"
+                          disabled={c.remaining <= 0}
+                          onClick={e => { e.stopPropagation(); setSelectedId(c.id); }}
+                        >
+                          {c.remaining <= 0 ? "모집 마감" : "참여하기"}
+                        </Button>
+                      )
+                    }
+                  />
+                );
+              })}
+            </div>
           )}
-        </div>
-      </section>
+        </section>
 
-      {/* FAQ */}
-      <section id="faq" className="container scroll-mt-20 py-16">
-        <div className="mx-auto max-w-2xl">
-          <h2 className="mb-8 text-center text-3xl font-bold tracking-tight text-foreground">
-            자주 묻는 질문
-          </h2>
-          <Accordion type="single" collapsible className="w-full">
-            {FAQS.map((faq, idx) => (
-              <AccordionItem
-                key={idx}
-                value={`item-${idx}`}
-                className="rounded-2xl border border-border/70 bg-card/70 mb-3 px-5"
-              >
-                <AccordionTrigger className="text-left text-base font-semibold hover:no-underline">
-                  {faq.q}
-                </AccordionTrigger>
-                <AccordionContent className="text-sm leading-relaxed text-muted-foreground">
-                  {faq.a}
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t border-border/60 bg-card/40">
-        <div className="container flex flex-col items-center justify-between gap-4 py-8 sm:flex-row">
-          <BrandLogo size={28} textClassName="text-base" />
-          <div className="flex flex-col items-center gap-2 sm:flex-row sm:gap-6">
-            {user?.role === "admin" && (
-              <Link href="/admin">
-                <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary transition-colors hover:text-primary/80">
-                  <LayoutDashboard className="h-4 w-4" />
-                  관리자 대시보드
-                </span>
+        {/* 내 활동 */}
+        <section>
+          <div className="mb-6 flex items-end justify-between gap-3">
+            <div>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary mb-2">
+                <ClipboardList className="h-3.5 w-3.5" /> 내 활동
+              </span>
+              <h2 className="text-2xl font-bold text-foreground">참여 진행 현황</h2>
+            </div>
+            {myParts && myParts.length > 0 && (
+              <Link href="/my">
+                <Button variant="ghost" size="sm" className="shrink-0 text-primary font-medium">
+                  전체 보기 <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
               </Link>
             )}
-            <p className="text-sm text-muted-foreground">
-              © {new Date().getFullYear()} ARVEN FACTORY. All rights reserved.
-            </p>
           </div>
-        </div>
-      </footer>
+
+          {partsLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div key={i} className="h-36 animate-pulse rounded-3xl bg-muted" />
+              ))}
+            </div>
+          ) : !myParts || myParts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-2 rounded-3xl border border-dashed border-border bg-card py-14 text-center">
+              <ClipboardList className="h-8 w-8 text-muted-foreground" />
+              <p className="font-medium text-muted-foreground">아직 참여한 캠페인이 없습니다</p>
+              <p className="text-sm text-muted-foreground">위 캠페인에 참여하면 여기서 진행 상황을 확인할 수 있어요.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {myParts.slice(0, 5).map(p => {
+                const status = p.status as ParticipationStatus;
+                const c = p.campaign;
+                return (
+                  <div
+                    key={p.id}
+                    className="overflow-hidden rounded-3xl border border-border/70 bg-card shadow-sm"
+                  >
+                    <div className="flex gap-4 p-4">
+                      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-muted">
+                        {c?.thumbnailUrl ? (
+                          <img src={c.thumbnailUrl} alt={c.title} className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                            <ImageIcon className="h-5 w-5" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="font-semibold leading-snug text-foreground truncate">
+                            {c?.title ?? "삭제된 캠페인"}
+                          </h3>
+                          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE[status]}`}>
+                            {STATUS_LABEL[status]}
+                          </span>
+                        </div>
+                        {c && (
+                          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            <span className="inline-flex items-center gap-1">
+                              <Search className="h-3 w-3 text-primary" /> {c.keyword}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <Wallet className="h-3 w-3 text-primary" />
+                              {formatKRW(totalPayout(c.productPrice, c.commission))}
+                            </span>
+                          </div>
+                        )}
+                        <div className="mt-1">
+                          <WorkflowStepper status={status} />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="border-t border-border/60 bg-secondary/30 px-4 py-2.5 flex justify-end">
+                      <Link href="/my">
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-primary font-medium">
+                          인증샷 등록 / 상세 보기 <ArrowRight className="ml-1 h-3 w-3" />
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      </main>
+
+      {/* Campaign apply dialog */}
+      <Dialog open={!!selected} onOpenChange={o => !o && setSelectedId(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          {selected && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="text-xl">{selected.title}</DialogTitle>
+                <DialogDescription>
+                  아래 안내에 따라 참여를 신청한 뒤, 직접 상품을 구매하고 리뷰를 작성해 주세요.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="overflow-hidden rounded-2xl bg-muted">
+                {selected.thumbnailUrl ? (
+                  <img src={selected.thumbnailUrl} alt={selected.title} className="max-h-60 w-full object-cover" />
+                ) : (
+                  <div className="flex h-40 items-center justify-center text-muted-foreground">
+                    <ImageIcon className="h-10 w-10" />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-3 rounded-2xl border border-border/70 bg-secondary/40 p-4 text-sm">
+                <div className="flex items-start gap-2">
+                  <Search className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <div>
+                    <p className="font-medium text-foreground">검색 키워드</p>
+                    <p className="text-muted-foreground">
+                      쇼핑몰에서 <b className="text-foreground">"{selected.keyword}"</b> (으)로 검색해 구매해 주세요.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 shrink-0 text-primary" />
+                  <span className="text-muted-foreground">
+                    모집 {selected.taken}/{selected.slots}명 · 잔여 {selected.remaining}자리
+                  </span>
+                </div>
+              </div>
+
+              {selected.description && (
+                <p className="whitespace-pre-line text-sm text-muted-foreground">{selected.description}</p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-border/70 p-3 text-center">
+                  <p className="text-xs text-muted-foreground">상품비 (환급)</p>
+                  <p className="font-semibold">{formatKRW(selected.productPrice)}</p>
+                </div>
+                <div className="rounded-2xl border border-border/70 p-3 text-center">
+                  <p className="text-xs text-muted-foreground">리뷰 수수료</p>
+                  <p className="font-semibold">{formatKRW(selected.commission)}</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between rounded-2xl bg-primary/10 px-4 py-3">
+                <span className="text-sm font-medium text-foreground">총 지급 예정액</span>
+                <span className="text-lg font-bold text-primary">
+                  {formatKRW(totalPayout(selected.productPrice, selected.commission))}
+                </span>
+              </div>
+
+              <DialogFooter>
+                {joinedCampaignIds.has(selected.id) ? (
+                  <Button className="w-full" variant="outline" onClick={() => navigate("/my")}>
+                    내 활동에서 진행하기
+                  </Button>
+                ) : (
+                  <Button
+                    className="w-full rounded-xl font-semibold"
+                    disabled={selected.remaining <= 0 || joinMutation.isPending}
+                    onClick={() => joinMutation.mutate({ campaignId: selected.id })}
+                  >
+                    {joinMutation.isPending ? "신청 중..." : selected.remaining <= 0 ? "모집 마감" : "이 캠페인 참여 신청하기"}
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

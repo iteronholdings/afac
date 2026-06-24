@@ -1,5 +1,6 @@
 export type ParticipationStatus =
   | "applied"
+  | "searched"
   | "purchased"
   | "reviewed"
   | "approved"
@@ -8,6 +9,7 @@ export type ParticipationStatus =
 
 export const STATUS_LABEL: Record<ParticipationStatus, string> = {
   applied: "참여 신청",
+  searched: "검색 인증 완료",
   purchased: "구매 인증 완료",
   reviewed: "리뷰 인증 완료",
   approved: "지급 확정",
@@ -18,6 +20,7 @@ export const STATUS_LABEL: Record<ParticipationStatus, string> = {
 /** Short label for compact badges. */
 export const STATUS_SHORT: Record<ParticipationStatus, string> = {
   applied: "신청",
+  searched: "검색완료",
   purchased: "구매완료",
   reviewed: "리뷰완료",
   approved: "지급확정",
@@ -28,6 +31,7 @@ export const STATUS_SHORT: Record<ParticipationStatus, string> = {
 /** Tailwind classes for status badges (soft, rounded). */
 export const STATUS_BADGE: Record<ParticipationStatus, string> = {
   applied: "bg-slate-100 text-slate-600",
+  searched: "bg-blue-100 text-blue-700",
   purchased: "bg-sky-100 text-sky-700",
   reviewed: "bg-violet-100 text-violet-700",
   approved: "bg-amber-100 text-amber-700",
@@ -38,6 +42,7 @@ export const STATUS_BADGE: Record<ParticipationStatus, string> = {
 /** Ordered workflow steps for stepper UIs (excludes rejected). */
 export const WORKFLOW_STEPS: ParticipationStatus[] = [
   "applied",
+  "searched",
   "purchased",
   "reviewed",
   "approved",

@@ -15,23 +15,16 @@ import BrandLogo from "@/components/BrandLogo";
 
 type NavLink = { label: string; href: string };
 
-const PUBLIC_NAV_LINKS: NavLink[] = [
-  { label: "이용 방법", href: "#how-it-works" },
-  { label: "자주 묻는 질문", href: "#faq" },
+const AUTH_NAV_LINKS: NavLink[] = [
+  { label: "진행 중인 캠페인", href: "/campaigns" },
+  { label: "내 활동", href: "/my" },
 ];
-
-// 캠페인 메뉴는 로그인한 사용자에게만 노출한다.
-const CAMPAIGN_NAV_LINK: NavLink = { label: "진행 중인 캠페인", href: "#campaigns" };
 
 export default function SiteHeader() {
   const { user, isAuthenticated, loading, logout } = useAuth();
   const [open, setOpen] = useState(false);
 
   const initial = (user?.fullName || user?.name || "리").charAt(0);
-
-  const navLinks: NavLink[] = isAuthenticated
-    ? [PUBLIC_NAV_LINKS[0], CAMPAIGN_NAV_LINK, PUBLIC_NAV_LINKS[1]]
-    : PUBLIC_NAV_LINKS;
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
@@ -40,17 +33,19 @@ export default function SiteHeader() {
           <BrandLogo size={38} textClassName="text-lg" />
         </Link>
 
-        <nav className="hidden items-center gap-8 md:flex">
-          {navLinks.map(link => (
-            <a
-              key={link.href}
-              href={link.href}
-              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              {link.label}
-            </a>
-          ))}
-        </nav>
+        {isAuthenticated && (
+          <nav className="hidden items-center gap-8 md:flex">
+            {AUTH_NAV_LINKS.map(link => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </nav>
+        )}
 
         <div className="flex items-center gap-2">
           {loading ? (
@@ -117,31 +112,22 @@ export default function SiteHeader() {
           )}
 
           {/* Mobile menu */}
-          <DropdownMenu open={open} onOpenChange={setOpen}>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              {navLinks.map(link => (
-                <DropdownMenuItem key={link.href} asChild>
-                  <a href={link.href}>{link.label}</a>
-                </DropdownMenuItem>
-              ))}
-              {!isAuthenticated && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link href="/login">로그인</Link>
+          {isAuthenticated && (
+            <DropdownMenu open={open} onOpenChange={setOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="md:hidden">
+                  <Menu className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                {AUTH_NAV_LINKS.map(link => (
+                  <DropdownMenuItem key={link.href} asChild>
+                    <Link href={link.href}>{link.label}</Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/signup">회원가입</Link>
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </div>
     </header>

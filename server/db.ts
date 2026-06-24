@@ -3,8 +3,10 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   campaigns,
   InsertCampaign,
+  InsertMessage,
   InsertParticipation,
   InsertUser,
+  messages,
   participations,
   users,
 } from "../drizzle/schema";
@@ -120,13 +122,14 @@ export async function createMember(member: {
   passwordHash: string;
   fullName: string;
   phone: string;
+  role?: "user" | "business" | "admin";
 }) {
   const db = await getDb();
   if (!db) {
     throw new Error("Database not available");
   }
 
-  const role = member.openId === ENV.ownerOpenId ? "admin" : "user";
+  const role = member.openId === ENV.ownerOpenId ? "admin" : (member.role ?? "user");
 
   await db.insert(users).values({
     openId: member.openId,
@@ -305,4 +308,41 @@ export async function listParticipations(opts?: { campaignId?: number }) {
       .orderBy(desc(participations.appliedAt));
   }
   return db.select().from(participations).orderBy(desc(participations.appliedAt));
+}
+
+// === Messages ===
+
+export async function listMessages(participationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(messages)
+    .where(eq(messages.participationId, participationId))
+    .orderBy(messages.createdAt);
+}
+
+export async function createMessage(data: InsertMessage) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(messages).values(data);
+  const insertId = (result as unknown as { insertId: number }[])[0]?.insertId
+    ?? (result as unknown as { insertId: number }).insertId;
+  const rows = await db.select().from(messages).where(eq(messages.id, Number(insertId))).limit(1);
+  return rows[0];
+}
+
+export async function countUnreadMessages(participationId: number, viewerId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db
+    .select()
+    .from(messages)
+    .where(
+      and(
+        eq(messages.participationId, participationId),
+        // unread = sent by the other party (not by viewer)
+      )
+    );
+  return rows.filter(r => r.senderId !== viewerId).length;
 }

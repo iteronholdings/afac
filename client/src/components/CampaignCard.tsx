@@ -26,6 +26,7 @@ export default function CampaignCard({
   onClick?: () => void;
 }) {
   const soldOut = campaign.remaining <= 0;
+  const pct = Math.round((campaign.taken / campaign.slots) * 100);
 
   return (
     <div
@@ -34,6 +35,7 @@ export default function CampaignCard({
         onClick ? "cursor-pointer" : ""
       }`}
     >
+      {/* 썸네일 */}
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">
         {campaign.thumbnailUrl ? (
           <img
@@ -46,13 +48,11 @@ export default function CampaignCard({
             <ImageIcon className="h-10 w-10" />
           </div>
         )}
-        <div className="absolute left-3 top-3 flex gap-1.5">
-          {campaign.category && (
-            <Badge className="rounded-full bg-background/90 text-foreground shadow-sm hover:bg-background/90">
-              {campaign.category}
-            </Badge>
-          )}
-        </div>
+        {campaign.category && (
+          <Badge className="absolute left-3 top-3 rounded-full bg-background/90 text-foreground shadow-sm hover:bg-background/90">
+            {campaign.category}
+          </Badge>
+        )}
         {soldOut && campaign.status === "open" && (
           <div className="absolute inset-0 flex items-center justify-center bg-background/70 backdrop-blur-[1px]">
             <span className="rounded-full bg-foreground/80 px-4 py-1.5 text-sm font-semibold text-background">
@@ -70,24 +70,37 @@ export default function CampaignCard({
           <span className="truncate">{campaign.keyword}</span>
         </div>
 
-        <div className="mt-auto space-y-2.5 pt-1">
-          <div className="flex items-end justify-between">
-            <span className="text-xs text-muted-foreground">총 지급 예정액</span>
-            <span className="text-lg font-bold text-primary">
-              {formatKRW(totalPayout(campaign.productPrice, campaign.commission))}
+        {/* 모집 현황 — 핵심 정보 */}
+        <div className="mt-auto space-y-2 pt-1">
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5 text-sm font-medium text-foreground">
+              <Users className="h-4 w-4 text-primary" />
+              {soldOut ? (
+                <span className="text-muted-foreground">모집 마감</span>
+              ) : (
+                <>
+                  <span className="text-primary font-bold">{campaign.remaining}자리</span>
+                  <span className="text-muted-foreground">남음</span>
+                </>
+              )}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {campaign.taken}/{campaign.slots}명 모집
             </span>
           </div>
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              상품비 {formatKRW(campaign.productPrice)} + 수수료 {formatKRW(campaign.commission)}
-            </span>
+
+          {/* 진행률 바 */}
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className={`h-full rounded-full transition-all ${soldOut ? "bg-muted-foreground/40" : "bg-primary"}`}
+              style={{ width: `${Math.min(pct, 100)}%` }}
+            />
           </div>
-          <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            <Users className="h-3.5 w-3.5" />
-            <span>
-              모집 {campaign.taken}/{campaign.slots}명
-              {!soldOut && <span className="text-primary"> · {campaign.remaining}자리 남음</span>}
-            </span>
+
+          {/* 수수료 — 보조 정보 */}
+          <div className="flex items-center justify-between pt-0.5 text-xs text-muted-foreground">
+            <span>수수료 {formatKRW(campaign.commission)}</span>
+            <span>상품비 {formatKRW(campaign.productPrice)}</span>
           </div>
         </div>
 

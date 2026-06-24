@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { ChatDialog } from "@/components/ChatDialog";
 import { ImageUploader } from "@/components/ImageUploader";
 import SiteHeader from "@/components/SiteHeader";
 import WorkflowStepper from "@/components/WorkflowStepper";
@@ -22,6 +23,7 @@ import {
 import {
   ClipboardList,
   ImageIcon,
+  MessageCircle,
   PackageCheck,
   PencilLine,
   Search,
@@ -31,7 +33,7 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 
-type ProofKind = "purchase" | "review";
+type ProofKind = "search" | "purchase" | "review";
 
 export default function MyActivity() {
   const { isAuthenticated, loading: authLoading } = useAuth();
@@ -48,9 +50,18 @@ export default function MyActivity() {
     }
   }, [authLoading, isAuthenticated]);
 
-  const [uploadFor, setUploadFor] = useState<{ id: number; kind: ProofKind } | null>(null);
+  const [uploadFor, setUploadFor] = useState<{ id: number; kind: ProofKind; keyword?: string } | null>(null);
+  const [chatTarget, setChatTarget] = useState<{ participationId: number; title: string } | null>(null);
   const [proofUrl, setProofUrl] = useState<string | null>(null);
 
+  const searchMutation = trpc.participation.submitSearchProof.useMutation({
+    onSuccess: () => {
+      utils.participation.mine.invalidate();
+      toast.success("검색 인증샷이 등록되었습니다.");
+      closeUpload();
+    },
+    onError: err => toast.error(err.message),
+  });
   const purchaseMutation = trpc.participation.submitPurchaseProof.useMutation({
     onSuccess: () => {
       utils.participation.mine.invalidate();
@@ -78,14 +89,16 @@ export default function MyActivity() {
       toast.error("이미지를 먼저 업로드해 주세요.");
       return;
     }
-    if (uploadFor.kind === "purchase") {
+    if (uploadFor.kind === "search") {
+      searchMutation.mutate({ participationId: uploadFor.id, proofUrl });
+    } else if (uploadFor.kind === "purchase") {
       purchaseMutation.mutate({ participationId: uploadFor.id, proofUrl });
     } else {
       reviewMutation.mutate({ participationId: uploadFor.id, proofUrl });
     }
   };
 
-  const pending = purchaseMutation.isPending || reviewMutation.isPending;
+  const pending = searchMutation.isPending || purchaseMutation.isPending || reviewMutation.isPending;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-secondary/40 to-background">
@@ -182,10 +195,28 @@ export default function MyActivity() {
                     {status === "applied" && (
                       <Button
                         size="sm"
-                        onClick={() => setUploadFor({ id: p.id, kind: "purchase" })}
+                        onClick={() => setUploadFor({ id: p.id, kind: "search", keyword: c?.keyword })}
                       >
-                        <PackageCheck className="mr-1.5 h-4 w-4" /> 구매 인증샷 등록
+                        <Search className="mr-1.5 h-4 w-4" /> 검색 인증샷 등록
                       </Button>
+                    )}
+                    {status === "searched" && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => setUploadFor({ id: p.id, kind: "purchase", keyword: c?.keyword })}
+                        >
+                          <PackageCheck className="mr-1.5 h-4 w-4" /> 구매 인증샷 등록
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="bg-card"
+                          onClick={() => setUploadFor({ id: p.id, kind: "search", keyword: c?.keyword })}
+                        >
+                          검색 인증샷 다시 등록
+                        </Button>
+                      </>
                     )}
                     {status === "purchased" && (
                       <>
@@ -226,8 +257,28 @@ export default function MyActivity() {
                       </p>
                     )}
 
+                    {/* 채팅 문의 버튼 */}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="bg-card"
+                      onClick={() => setChatTarget({ participationId: p.id, title: c?.title ?? "캠페인 문의" })}
+                    >
+                      <MessageCircle className="mr-1.5 h-4 w-4" /> 문의하기
+                    </Button>
+
                     {/* Show submitted proofs */}
                     <div className="ml-auto flex gap-2">
+                      {p.searchProofUrl && (
+                        <a
+                          href={p.searchProofUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+                        >
+                          검색 인증샷
+                        </a>
+                      )}
                       {p.purchaseProofUrl && (
                         <a
                           href={p.purchaseProofUrl}
@@ -263,15 +314,28 @@ export default function MyActivity() {
         )}
       </main>
 
+      {chatTarget && (
+        <ChatDialog
+          open={!!chatTarget}
+          onOpenChange={o => !o && setChatTarget(null)}
+          participationId={chatTarget.participationId}
+          title={chatTarget.title}
+        />
+      )}
+
       {/* Proof upload dialog */}
       <Dialog open={!!uploadFor} onOpenChange={o => !o && closeUpload()}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {uploadFor?.kind === "purchase" ? "구매 인증샷 등록" : "리뷰 인증샷 등록"}
+              {uploadFor?.kind === "search" ? "검색 인증샷 등록"
+                : uploadFor?.kind === "purchase" ? "구매 인증샷 등록"
+                : "리뷰 인증샷 등록"}
             </DialogTitle>
             <DialogDescription>
-              {uploadFor?.kind === "purchase"
+              {uploadFor?.kind === "search"
+                ? `키워드로 검색한 결과 화면 스크린샷을 업로드해 주세요. (검색어: ${uploadFor?.keyword ?? "캠페인 키워드"})`
+                : uploadFor?.kind === "purchase"
                 ? "상품 구매 내역(주문 완료 화면 등) 스크린샷을 업로드해 주세요."
                 : "작성한 리뷰가 보이는 화면 스크린샷을 업로드해 주세요."}
             </DialogDescription>
@@ -280,7 +344,7 @@ export default function MyActivity() {
           <ImageUploader
             value={proofUrl}
             onChange={setProofUrl}
-            purpose={uploadFor?.kind === "purchase" ? "purchase" : "review"}
+            purpose={uploadFor?.kind === "search" ? "purchase" : uploadFor?.kind === "purchase" ? "purchase" : "review"}
           />
 
           <DialogFooter>

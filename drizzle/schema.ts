@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, longtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -16,7 +16,7 @@ export const users = mysqlTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
+  role: mysqlEnum("role", ["user", "business", "admin"]).default("user").notNull(),
 
   /** Self-signup login ID (unique). Null for OAuth users. */
   loginId: varchar("loginId", { length: 64 }).unique(),
@@ -47,8 +47,8 @@ export const campaigns = mysqlTable("campaigns", {
   category: varchar("category", { length: 50 }),
   /** Search keyword reviewers must use to find & purchase the product. */
   keyword: varchar("keyword", { length: 200 }).notNull(),
-  /** Product thumbnail. Stored as a /manus-storage/ key or URL. Optional. */
-  thumbnailUrl: text("thumbnailUrl"),
+  /** Product thumbnail. Stored as base64 data URL or external URL. Optional. */
+  thumbnailUrl: longtext("thumbnailUrl"),
   /** Optional shopping link or extra guide for reviewers. */
   productUrl: text("productUrl"),
   /** Description / mission detail. */
@@ -81,6 +81,7 @@ export const participations = mysqlTable("participations", {
   userId: int("userId").notNull(),
   status: mysqlEnum("status", [
     "applied",
+    "searched",
     "purchased",
     "reviewed",
     "approved",
@@ -89,14 +90,17 @@ export const participations = mysqlTable("participations", {
   ])
     .default("applied")
     .notNull(),
-  /** Purchase proof screenshot (구매 인증샷). /manus-storage/ key or URL. */
-  purchaseProofUrl: text("purchaseProofUrl"),
-  /** Review proof screenshot (리뷰 인증샷). /manus-storage/ key or URL. */
-  reviewProofUrl: text("reviewProofUrl"),
+  /** Search proof screenshot (검색 인증샷). Stored as base64 data URL. */
+  searchProofUrl: longtext("searchProofUrl"),
+  /** Purchase proof screenshot (구매 인증샷). Stored as base64 data URL. */
+  purchaseProofUrl: longtext("purchaseProofUrl"),
+  /** Review proof screenshot (리뷰 인증샷). Stored as base64 data URL. */
+  reviewProofUrl: longtext("reviewProofUrl"),
   /** Optional memo from admin (e.g. rejection reason or payout note). */
   adminMemo: text("adminMemo"),
 
   appliedAt: timestamp("appliedAt").defaultNow().notNull(),
+  searchedAt: timestamp("searchedAt"),
   purchasedAt: timestamp("purchasedAt"),
   reviewedAt: timestamp("reviewedAt"),
   approvedAt: timestamp("approvedAt"),
@@ -106,3 +110,18 @@ export const participations = mysqlTable("participations", {
 
 export type Participation = typeof participations.$inferSelect;
 export type InsertParticipation = typeof participations.$inferInsert;
+
+/**
+ * 1:1 chat messages between admin and reviewer, scoped to a participation.
+ */
+export const messages = mysqlTable("messages", {
+  id: int("id").autoincrement().primaryKey(),
+  participationId: int("participationId").notNull(),
+  senderId: int("senderId").notNull(),
+  content: text("content"),
+  imageUrl: longtext("imageUrl"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = typeof messages.$inferInsert;

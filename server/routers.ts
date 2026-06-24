@@ -3,6 +3,7 @@ import { router } from "./_core/trpc";
 import { adminRouter } from "./routers/admin";
 import { authRouter } from "./routers/auth";
 import { campaignRouter } from "./routers/campaign";
+import { messageRouter } from "./routers/message";
 import { participationRouter } from "./routers/participation";
 import { uploadRouter } from "./routers/upload";
 
@@ -12,6 +13,7 @@ export const appRouter = router({
   auth: authRouter,
   campaign: campaignRouter,
   participation: participationRouter,
+  message: messageRouter,
   admin: adminRouter,
   upload: uploadRouter,
 });
