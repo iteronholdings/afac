@@ -26,6 +26,9 @@ export const participationRouter = router({
   join: protectedProcedure
     .input(z.object({ campaignId: z.number().int() }))
     .mutation(async ({ ctx, input }) => {
+      if (ctx.user.role !== "user") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "리뷰어 계정만 캠페인에 참여할 수 있습니다." });
+      }
       const campaign = await db.getCampaignById(input.campaignId);
       if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
       if (campaign.status !== "open") {

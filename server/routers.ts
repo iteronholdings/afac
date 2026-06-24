@@ -3,6 +3,9 @@ import { router } from "./_core/trpc";
 import { adminRouter } from "./routers/admin";
 import { authRouter } from "./routers/auth";
 import { campaignRouter } from "./routers/campaign";
+import { consultingRouter } from "./routers/consulting";
+import { depositRouter } from "./routers/deposit";
+import { directMessageRouter } from "./routers/directMessage";
 import { messageRouter } from "./routers/message";
 import { participationRouter } from "./routers/participation";
 import { uploadRouter } from "./routers/upload";
@@ -14,6 +17,9 @@ export const appRouter = router({
   campaign: campaignRouter,
   participation: participationRouter,
   message: messageRouter,
+  directMessage: directMessageRouter,
+  consulting: consultingRouter,
+  deposit: depositRouter,
   admin: adminRouter,
   upload: uploadRouter,
 });

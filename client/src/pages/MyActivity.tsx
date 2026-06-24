@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { ChatDialog } from "@/components/ChatDialog";
+import { useChatNotifications } from "@/hooks/useChatNotifications";
 import { ImageUploader } from "@/components/ImageUploader";
 import SiteHeader from "@/components/SiteHeader";
 import WorkflowStepper from "@/components/WorkflowStepper";
@@ -43,12 +44,16 @@ export default function MyActivity() {
     enabled: isAuthenticated,
   });
 
-  // Redirect to login if not authenticated (side effect).
+  const { user } = useAuth();
+
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      window.location.href = "/login";
-    }
-  }, [authLoading, isAuthenticated]);
+    if (authLoading) return;
+    if (!isAuthenticated) { window.location.href = "/afreviewer/login"; return; }
+    if (user?.role === "business") { window.location.href = "/client/dashboard"; return; }
+  }, [authLoading, isAuthenticated, user?.role]);
+
+  const partIds = (parts ?? []).map(p => p.id);
+  const unreadChats = useChatNotifications(partIds);
 
   const [uploadFor, setUploadFor] = useState<{ id: number; kind: ProofKind; keyword?: string } | null>(null);
   const [chatTarget, setChatTarget] = useState<{ participationId: number; title: string } | null>(null);
@@ -261,10 +266,13 @@ export default function MyActivity() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="bg-card"
+                      className="relative bg-card"
                       onClick={() => setChatTarget({ participationId: p.id, title: c?.title ?? "캠페인 문의" })}
                     >
                       <MessageCircle className="mr-1.5 h-4 w-4" /> 문의하기
+                      {unreadChats.has(p.id) && (
+                        <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-red-500" />
+                      )}
                     </Button>
 
                     {/* Show submitted proofs */}

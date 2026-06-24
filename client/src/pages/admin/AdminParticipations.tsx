@@ -1,5 +1,4 @@
 import AdminLayout from "@/components/AdminLayout";
-import { ChatDialog } from "@/components/ChatDialog";
 import { ProofThumb } from "@/components/ProofThumb";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,7 +39,15 @@ export default function AdminParticipations() {
   const [campaignFilter, setCampaignFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [expandedCampaigns, setExpandedCampaigns] = useState<Set<number>>(new Set());
-  const [chatTarget, setChatTarget] = useState<{ participationId: number; title: string } | null>(null);
+
+  // DM unread counts per reviewer (for chat buttons)
+  const { data: dmConvs = [] } = trpc.directMessage.conversations.useQuery(undefined, {
+    refetchInterval: 10000,
+  });
+  const dmUnreadSet = useMemo(
+    () => new Set(dmConvs.filter(c => c.unread > 0).map(c => c.reviewerId)),
+    [dmConvs]
+  );
 
   const setStatusMutation = trpc.participation.setStatus.useMutation({
     onSuccess: () => {
@@ -240,10 +247,16 @@ export default function AdminParticipations() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="bg-card"
-                              onClick={() => setChatTarget({ participationId: r.id, title: `${r.user?.fullName ?? "-"} · ${group.title}` })}
+                              className="relative bg-card"
+                              disabled={!r.user?.id}
+                              onClick={() => r.user?.id && window.dispatchEvent(
+                                new CustomEvent("open-dm", { detail: { reviewerId: r.user.id, reviewerName: r.user.fullName } })
+                              )}
                             >
                               <MessageCircle className="mr-1.5 h-4 w-4" /> 채팅
+                              {dmUnreadSet.has(r.user?.id ?? -1) && (
+                                <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-red-500" />
+                              )}
                             </Button>
                           </div>
                         </div>
@@ -255,14 +268,6 @@ export default function AdminParticipations() {
             );
           })}
         </div>
-      )}
-      {chatTarget && (
-        <ChatDialog
-          open={!!chatTarget}
-          onOpenChange={o => !o && setChatTarget(null)}
-          participationId={chatTarget.participationId}
-          title={chatTarget.title}
-        />
       )}
     </AdminLayout>
   );

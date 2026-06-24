@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import { markChatRead } from "@/hooks/useChatNotifications";
 import { trpc } from "@/lib/trpc";
 import { ImagePlus, Loader2, Send, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -67,8 +68,11 @@ export function ChatDialog({
   });
 
   useEffect(() => {
-    if (open) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [msgs.length, open]);
+    if (open) {
+      markChatRead(participationId);
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [msgs.length, open, participationId]);
 
   const handleFile = async (file: File) => {
     if (!ALLOWED_MIME.includes(file.type as (typeof ALLOWED_MIME)[number])) {

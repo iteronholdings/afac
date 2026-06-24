@@ -27,6 +27,32 @@ export const messageRouter = router({
       );
     }),
 
+  // 읽지 않은 메시지 수 일괄 조회 (localStorage 기반 알림용)
+  unreadCounts: protectedProcedure
+    .input(
+      z.object({
+        checks: z.array(
+          z.object({ participationId: z.number().int(), since: z.string() })
+        ),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      return Promise.all(
+        input.checks.map(async ({ participationId, since }) => {
+          const p = await db.getParticipationById(participationId);
+          if (!p) return { participationId, count: 0 };
+          if (ctx.user.role !== "admin" && p.userId !== ctx.user.id)
+            return { participationId, count: 0 };
+          const msgs = await db.listMessages(participationId);
+          const sinceDate = new Date(since);
+          const count = msgs.filter(
+            m => m.senderId !== ctx.user.id && new Date(m.createdAt) > sinceDate
+          ).length;
+          return { participationId, count };
+        })
+      );
+    }),
+
   // 메시지 전송
   send: protectedProcedure
     .input(

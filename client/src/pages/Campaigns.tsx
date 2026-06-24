@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import { formatKRW, totalPayout } from "@/lib/workflow";
+import { Input } from "@/components/ui/input";
 import { CheckCircle2, ImageIcon, Search, Sparkles, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -19,16 +20,15 @@ import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
 
 export default function Campaigns() {
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading, user } = useAuth();
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
 
-  // 비로그인 사용자는 캐페인 목록을 볼 수 없도록 로그인 페이지로 이동.
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
-      navigate("/login");
-    }
-  }, [authLoading, isAuthenticated, navigate]);
+    if (authLoading) return;
+    if (!isAuthenticated) { navigate("/afreviewer/login"); return; }
+    if (user?.role === "business") { navigate("/client/dashboard"); return; }
+  }, [authLoading, isAuthenticated, user?.role, navigate]);
 
   const { data: campaigns, isLoading, isError, refetch } = trpc.campaign.listOpen.useQuery(
     undefined,
@@ -38,6 +38,14 @@ export default function Campaigns() {
     enabled: isAuthenticated,
   });
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+
+  const filtered = (campaigns ?? []).filter(c => {
+    const q = search.trim();
+    if (!q) return true;
+    if (/^\d+$/.test(q)) return c.id === Number(q);
+    return c.title.toLowerCase().includes(q.toLowerCase()) || c.keyword.toLowerCase().includes(q.toLowerCase());
+  });
 
   const selected = campaigns?.find(c => c.id === selectedId) ?? null;
   const joinedCampaignIds = new Set(
@@ -59,7 +67,7 @@ export default function Campaigns() {
 
   const handleJoin = (campaignId: number) => {
     if (!isAuthenticated) {
-      navigate("/login");
+      navigate("/afreviewer/login");
       return;
     }
     joinMutation.mutate({ campaignId });
@@ -89,6 +97,16 @@ export default function Campaigns() {
           </p>
         </div>
 
+        <div className="relative mb-6 max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="캠페인 번호 또는 이름 검색"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="h-11 pl-9 bg-card"
+          />
+        </div>
+
         {isLoading || authLoading ? (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -113,7 +131,7 @@ export default function Campaigns() {
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {campaigns.map(c => {
+            {filtered.map(c => {
               const joined = joinedCampaignIds.has(c.id);
               return (
                 <CampaignCard

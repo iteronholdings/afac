@@ -6,18 +6,18 @@ export function useAuth() {
   const utils = trpc.useUtils();
   const { data: user, isLoading: loading } = trpc.auth.me.useQuery();
 
-  const logoutMutation = trpc.auth.logout.useMutation({
-    onSuccess: async () => {
-      await utils.auth.me.invalidate();
-      navigate("/");
-    },
-  });
+  const logoutMutation = trpc.auth.logout.useMutation();
 
   return {
     user: user ?? null,
     loading,
     isLoading: loading,
     isAuthenticated: !!user,
-    logout: () => logoutMutation.mutate(),
+    /** Log out, then redirect to `redirectTo` (defaults to "/"). */
+    logout: async (redirectTo: string = "/") => {
+      await logoutMutation.mutateAsync();
+      await utils.auth.me.invalidate();
+      navigate(redirectTo);
+    },
   };
 }

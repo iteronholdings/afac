@@ -9,10 +9,18 @@ const campaignInput = z.object({
   keyword: z.string().trim().min(1, "검색 키워드를 입력해 주세요.").max(200),
   thumbnailUrl: z.string().trim().optional(),
   productUrl: z.string().trim().optional(),
-  description: z.string().trim().max(2000).optional(),
+  description: z.string().trim().max(4000).optional(),
   productPrice: z.number().int().min(0),
   commission: z.number().int().min(0),
   slots: z.number().int().min(1).max(10000),
+  photoCount: z.number().int().min(0).max(10000).optional(),
+  textCount: z.number().int().min(0).max(10000).optional(),
+  starCount: z.number().int().min(0).max(10000).optional(),
+  startDate: z.string().trim().max(20).optional(),
+  endDate: z.string().trim().max(20).optional(),
+  schedule: z.string().max(2000).optional(),
+  photoGuideZip: z.string().optional(),
+  photoGuideZipName: z.string().max(255).optional(),
 });
 
 export const campaignRouter = router({
@@ -103,15 +111,86 @@ export const campaignRouter = router({
       return db.updateCampaign(input.id, { status: input.status });
     }),
 
-  // Business: request a new campaign (starts as pending, admin must approve).
+  // Business: fetch a product's thumbnail + price from its URL via OG/meta tags.
+  // Best-effort — Coupang/Naver sometimes omit or block these; caller falls back
+  // to manual entry when fields come back empty.
+  fetchProductMeta: businessProcedure
+    .input(z.object({ url: z.string().trim().url("올바른 URL을 입력해 주세요.") }))
+    .mutation(async ({ input }) => {
+      try {
+        const res = await fetch(input.url, {
+          headers: {
+            "user-agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+            "accept-language": "ko-KR,ko;q=0.9",
+          },
+          redirect: "follow",
+        });
+        const html = await res.text();
+
+        const meta = (prop: string) => {
+          const re = new RegExp(
+            `<meta[^>]+(?:property|name)=["']${prop}["'][^>]+content=["']([^"']+)["']`,
+            "i"
+          );
+          const m = html.match(re) ?? html.match(
+            new RegExp(`<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${prop}["']`, "i")
+          );
+          return m?.[1];
+        };
+
+        const thumbnailUrl = meta("og:image") ?? null;
+        const title = meta("og:title") ?? null;
+
+        // price: try meta tags first, then JSON-LD, then a ₩/원 amount.
+        let priceRaw =
+          meta("product:price:amount") ??
+          meta("og:price:amount") ??
+          html.match(/"price"\s*:\s*"?([0-9][0-9,]*)"?/i)?.[1] ??
+          html.match(/([0-9]{1,3}(?:,[0-9]{3})+)\s*원/)?.[1];
+        const price = priceRaw ? parseInt(priceRaw.replace(/[^0-9]/g, ""), 10) : null;
+
+        return { thumbnailUrl, title, price: Number.isFinite(price as number) ? price : null };
+      } catch {
+        return { thumbnailUrl: null, title: null, price: null };
+      }
+    }),
+
+  // Business: request a new campaign. Charges the seller's deposit balance up
+  // front (예치금 차감) — fails if the balance is insufficient — then creates the
+  // campaign as pending for admin approval.
   request: businessProcedure
     .input(campaignInput)
     .mutation(async ({ ctx, input }) => {
+      const REVIEW_FEE = 2000;   // 셀러 부담 건당 리뷰 비용
+      const SHIPPING_FEE = 2300; // 건당 택배비
+      const perUnit = (input.productPrice ?? 0) + REVIEW_FEE + SHIPPING_FEE;
+      const total = perUnit * input.slots;
+
+      const me = await db.getUserById(ctx.user.id);
+      const balance = me?.depositBalance ?? 0;
+      if (balance < total) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: `예치금이 부족합니다. (필요 ${total.toLocaleString()}원 · 보유 ${balance.toLocaleString()}원)`,
+        });
+      }
+
       const created = await db.createCampaign({
         ...input,
         status: "pending",
         createdBy: ctx.user.id,
       });
+
+      // Deduct after the campaign row exists so we can reference it in the memo.
+      await db.adjustDeposit({
+        userId: ctx.user.id,
+        amount: -total,
+        type: "campaign",
+        memo: `캠페인 결제: ${input.title}`,
+        createdBy: ctx.user.id,
+      });
+
       return created;
     }),
 

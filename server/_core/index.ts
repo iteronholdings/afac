@@ -32,9 +32,10 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  // Configure body parser with larger size limit for file uploads.
+  // A 50MB ZIP becomes ~67MB once base64-encoded in the JSON body, so allow 100MB.
+  app.use(express.json({ limit: "100mb" }));
+  app.use(express.urlencoded({ limit: "100mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   // tRPC API
@@ -53,14 +54,18 @@ async function startServer() {
   }
 
   const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  // On a hosting platform (Railway 등) PORT is injected and MUST be used exactly —
+  // never scan for a different port, or the platform's router can't reach the app
+  // ("train has not arrived" 404). Only fall back to port-scan for local dev.
+  const port = process.env.PORT ? preferredPort : await findAvailablePort(preferredPort);
 
-  if (port !== preferredPort) {
+  if (!process.env.PORT && port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+  // Bind 0.0.0.0 so the platform proxy (and not just localhost) can reach it.
+  server.listen(port, "0.0.0.0", () => {
+    console.log(`Server running on 0.0.0.0:${port} (NODE_ENV=${process.env.NODE_ENV})`);
   });
 }
 

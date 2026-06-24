@@ -36,7 +36,7 @@ export default function CampaignCard({
       }`}
     >
       {/* 썸네일 */}
-      <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+      <div className="relative aspect-square overflow-hidden bg-muted">
         {campaign.thumbnailUrl ? (
           <img
             src={campaign.thumbnailUrl}
@@ -63,7 +63,12 @@ export default function CampaignCard({
       </div>
 
       <div className="flex flex-1 flex-col gap-3 p-5">
-        <h3 className="line-clamp-2 font-semibold leading-snug text-foreground">{campaign.title}</h3>
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="line-clamp-2 font-semibold leading-snug text-foreground">{campaign.title}</h3>
+          <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            No.{campaign.id}
+          </span>
+        </div>
 
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Search className="h-3.5 w-3.5 shrink-0 text-primary" />

@@ -69,6 +69,9 @@ export const authRouter = router({
         fullName: fullNameSchema,
         phone: phoneSchema,
         role: z.enum(["user", "business"]).default("user"),
+        bankName: z.string().max(50).optional(),
+        bankAccount: z.string().max(50).optional(),
+        bankHolder: z.string().max(50).optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
@@ -90,6 +93,9 @@ export const authRouter = router({
         fullName: input.fullName,
         phone: input.phone,
         role: input.role,
+        bankName: input.bankName,
+        bankAccount: input.bankAccount,
+        bankHolder: input.bankHolder,
       });
 
       if (!user) {

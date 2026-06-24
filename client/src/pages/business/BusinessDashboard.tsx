@@ -1,30 +1,23 @@
-import { useAuth } from "@/_core/hooks/useAuth";
-import SiteHeader from "@/components/SiteHeader";
+import ClientLayout from "@/components/ClientLayout";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import {
   Building2,
   ChevronDown,
   ChevronRight,
   ImageIcon,
-  Loader2,
   PackagePlus,
   Search,
   Users,
 } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { useLocation } from "wouter";
 
 const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
   pending: "승인 대기",
@@ -48,29 +41,10 @@ const PARTICIPATION_STATUS_LABEL: Record<string, string> = {
   rejected: "반려",
 };
 
-type CampaignForm = {
-  title: string;
-  category: string;
-  keyword: string;
-  productUrl: string;
-  description: string;
-  productPrice: string;
-  commission: string;
-  slots: string;
-};
-
-const EMPTY_FORM: CampaignForm = {
-  title: "", category: "", keyword: "", productUrl: "",
-  description: "", productPrice: "", commission: "", slots: "1",
-};
-
 export default function BusinessDashboard() {
-  const { user } = useAuth();
-  const utils = trpc.useUtils();
+  const [, navigate] = useLocation();
   const { data: campaigns, isLoading } = trpc.campaign.myBusiness.useQuery();
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState<CampaignForm>(EMPTY_FORM);
   const [selectedProof, setSelectedProof] = useState<{ url: string; label: string } | null>(null);
 
   const { data: participants, isLoading: loadingParts } = trpc.campaign.campaignParticipants.useQuery(
@@ -78,62 +52,17 @@ export default function BusinessDashboard() {
     { enabled: expandedId !== null }
   );
 
-  const requestMutation = trpc.campaign.request.useMutation({
-    onSuccess: () => {
-      utils.campaign.myBusiness.invalidate();
-      toast.success("캠페인 신청이 완료되었습니다. 관리자 승인 후 모집이 시작됩니다.");
-      setShowForm(false);
-      setForm(EMPTY_FORM);
-    },
-    onError: err => toast.error(err.message),
-  });
-
-  const update = (k: keyof CampaignForm) => (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => setForm(prev => ({ ...prev, [k]: e.target.value }));
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const price = parseInt(form.productPrice, 10);
-    const comm = parseInt(form.commission, 10);
-    const slots = parseInt(form.slots, 10);
-    if (!form.title || !form.keyword) { toast.error("제목과 키워드는 필수입니다."); return; }
-    if (isNaN(price) || price < 0) { toast.error("상품가를 올바르게 입력해 주세요."); return; }
-    if (isNaN(comm) || comm < 0) { toast.error("수수료를 올바르게 입력해 주세요."); return; }
-    if (isNaN(slots) || slots < 1) { toast.error("모집 인원을 올바르게 입력해 주세요."); return; }
-    requestMutation.mutate({
-      title: form.title.trim(),
-      category: form.category.trim() || undefined,
-      keyword: form.keyword.trim(),
-      productUrl: form.productUrl.trim() || undefined,
-      description: form.description.trim() || undefined,
-      productPrice: price,
-      commission: comm,
-      slots,
-    });
-  };
-
   return (
-    <div className="min-h-screen bg-gradient-to-b from-secondary/40 to-background">
-      <SiteHeader />
-
-      <main className="container max-w-5xl py-10">
-        {/* Header */}
-        <div className="mb-8 flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-2">
-            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              <Building2 className="h-3.5 w-3.5" /> 업체 대시보드
-            </span>
-            <h1 className="text-2xl font-bold text-foreground sm:text-3xl">내 캠페인 현황</h1>
-            <p className="text-muted-foreground">
-              신청한 캠페인과 리뷰어들의 참여 현황을 확인하세요.
-            </p>
-          </div>
-          <Button className="shrink-0 rounded-full font-semibold" onClick={() => setShowForm(true)}>
-            <PackagePlus className="mr-2 h-4 w-4" /> 캠페인 신청
-          </Button>
-        </div>
-
+    <ClientLayout
+      title="캠페인 신청 관리"
+      description="신청한 캠페인과 리뷰어들의 참여 현황을 확인하세요."
+      actions={
+        <Button className="gap-1.5 bg-orange-500 hover:bg-orange-600" onClick={() => navigate("/client/campaign/new")}>
+          <PackagePlus className="h-4 w-4" /> 캠페인 신청
+        </Button>
+      }
+    >
+      <div className="mx-auto max-w-5xl">
         {/* Campaign list */}
         {isLoading ? (
           <div className="space-y-4">
@@ -146,7 +75,7 @@ export default function BusinessDashboard() {
             </div>
             <p className="font-semibold">신청한 캠페인이 없습니다</p>
             <p className="text-sm text-muted-foreground">캠페인을 신청하면 관리자 검토 후 모집이 시작됩니다.</p>
-            <Button className="mt-1 rounded-full font-semibold" onClick={() => setShowForm(true)}>
+            <Button className="mt-1 rounded-full font-semibold" onClick={() => navigate("/client/campaign/new")}>
               첫 캠페인 신청하기
             </Button>
           </div>
@@ -268,7 +197,7 @@ export default function BusinessDashboard() {
             })}
           </div>
         )}
-      </main>
+      </div>
 
       {/* Proof photo lightbox */}
       <Dialog open={!!selectedProof} onOpenChange={o => !o && setSelectedProof(null)}>
@@ -281,67 +210,6 @@ export default function BusinessDashboard() {
           )}
         </DialogContent>
       </Dialog>
-
-      {/* Campaign request form */}
-      <Dialog open={showForm} onOpenChange={o => { if (!o) { setShowForm(false); setForm(EMPTY_FORM); } }}>
-        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>캠페인 신청</DialogTitle>
-            <DialogDescription>
-              신청 후 관리자 검토를 거쳐 승인되면 리뷰어 모집이 시작됩니다.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSubmit} className="space-y-4 py-1">
-            <div className="space-y-1.5">
-              <Label>캠페인 제목 *</Label>
-              <Input placeholder="예: 촉촉 수분크림 체험단 모집" value={form.title} onChange={update("title")} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>카테고리</Label>
-                <Input placeholder="예: 뷰티, 푸드" value={form.category} onChange={update("category")} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>검색 키워드 *</Label>
-                <Input placeholder="예: 수분크림 추천" value={form.keyword} onChange={update("keyword")} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>상품 링크</Label>
-              <Input placeholder="https://..." value={form.productUrl} onChange={update("productUrl")} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>캠페인 설명</Label>
-              <Textarea placeholder="리뷰어에게 안내할 미션 내용을 입력하세요." rows={3} value={form.description} onChange={update("description")} />
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label>상품가 (원) *</Label>
-                <Input type="number" min={0} placeholder="0" value={form.productPrice} onChange={update("productPrice")} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>수수료 (원) *</Label>
-                <Input type="number" min={0} placeholder="0" value={form.commission} onChange={update("commission")} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>모집 인원 *</Label>
-                <Input type="number" min={1} placeholder="1" value={form.slots} onChange={update("slots")} />
-              </div>
-            </div>
-
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" onClick={() => { setShowForm(false); setForm(EMPTY_FORM); }}>
-                취소
-              </Button>
-              <Button type="submit" disabled={requestMutation.isPending}>
-                {requestMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                신청하기
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
+    </ClientLayout>
   );
 }

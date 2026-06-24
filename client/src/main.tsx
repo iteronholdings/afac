@@ -19,9 +19,9 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   // Avoid redirect loops on auth pages.
   const path = window.location.pathname;
-  if (path === "/login" || path === "/signup") return;
+  if (path.startsWith("/afreviewer/") || path.startsWith("/client/")) return;
 
-  window.location.href = "/login";
+  window.location.href = "/afreviewer/login";
 };
 
 queryClient.getQueryCache().subscribe(event => {

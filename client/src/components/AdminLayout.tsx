@@ -1,11 +1,14 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import {
+  Building2,
   Home,
   LayoutDashboard,
   ListChecks,
   LogOut,
   Megaphone,
+  Receipt,
+  Rocket,
   Users,
 } from "lucide-react";
 import { ReactNode, useEffect } from "react";
@@ -15,7 +18,10 @@ import { ARBEN_LOGO_URL } from "@/components/BrandLogo";
 const NAV = [
   { label: "캠페인 관리", href: "/admin", icon: Megaphone, exact: true },
   { label: "참여 현황", href: "/admin/participations", icon: ListChecks },
-  { label: "회원 관리", href: "/admin/members", icon: Users },
+  { label: "정산 관리", href: "/admin/settlement", icon: Receipt },
+  { label: "상위노출 문의", href: "/admin/consulting", icon: Rocket },
+  { label: "업체 관리", href: "/admin/businesses", icon: Building2 },
+  { label: "리뷰어 관리", href: "/admin/members", icon: Users },
 ];
 
 function NavItem({
@@ -62,7 +68,7 @@ export default function AdminLayout({
   // Redirect unauthenticated users to login (side effect, not during render).
   useEffect(() => {
     if (!loading && !isAuthenticated) {
-      window.location.href = "/login";
+      window.location.href = "/afreviewer/login";
     }
   }, [loading, isAuthenticated]);
 
@@ -143,7 +149,7 @@ export default function AdminLayout({
           <Button
             variant="ghost"
             className="w-full justify-start text-muted-foreground"
-            onClick={() => logout()}
+            onClick={() => logout("/afreviewer/login")}
           >
             <LogOut className="mr-2 h-4 w-4" /> 로그아웃
           </Button>

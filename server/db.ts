@@ -1,8 +1,13 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   campaigns,
+  consultingRequests,
+  depositTransactions,
+  directMessages,
   InsertCampaign,
+  InsertConsultingRequest,
+  InsertDirectMessage,
   InsertMessage,
   InsertParticipation,
   InsertUser,
@@ -13,6 +18,7 @@ import {
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
+let _migrated = false;
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
@@ -24,7 +30,103 @@ export async function getDb() {
       _db = null;
     }
   }
+  if (_db && !_migrated) {
+    _migrated = true;
+    await runMigrations(_db).catch(e => console.warn("[Migration] Failed:", e));
+  }
   return _db;
+}
+
+async function runMigrations(db: ReturnType<typeof drizzle>) {
+  const alterStatements = [
+    sql`ALTER TABLE users ADD COLUMN bankName VARCHAR(50)`,
+    sql`ALTER TABLE users ADD COLUMN bankAccount VARCHAR(50)`,
+    sql`ALTER TABLE users ADD COLUMN bankHolder VARCHAR(50)`,
+    sql`ALTER TABLE users ADD COLUMN memberCode VARCHAR(20)`,
+    sql`ALTER TABLE campaigns ADD COLUMN photoCount INT NOT NULL DEFAULT 0`,
+    sql`ALTER TABLE campaigns ADD COLUMN textCount INT NOT NULL DEFAULT 0`,
+    sql`ALTER TABLE campaigns ADD COLUMN starCount INT NOT NULL DEFAULT 0`,
+    sql`ALTER TABLE campaigns ADD COLUMN startDate VARCHAR(20)`,
+    sql`ALTER TABLE campaigns ADD COLUMN endDate VARCHAR(20)`,
+    sql`ALTER TABLE campaigns ADD COLUMN schedule TEXT`,
+    sql`ALTER TABLE campaigns ADD COLUMN photoGuideZip LONGTEXT`,
+    sql`ALTER TABLE campaigns ADD COLUMN photoGuideZipName VARCHAR(255)`,
+    sql`ALTER TABLE users ADD COLUMN depositBalance INT NOT NULL DEFAULT 0`,
+  ];
+  for (const stmt of alterStatements) {
+    try {
+      await db.execute(stmt);
+    } catch (e: any) {
+      const code = e?.code ?? e?.cause?.code;
+      if (code !== "ER_DUP_FIELDNAME") throw e;
+    }
+  }
+
+  // Create tables that may not exist yet (idempotent).
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS consulting_requests (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        userId INT NOT NULL,
+        platform VARCHAR(30) NOT NULL,
+        productUrl TEXT,
+        targetKeyword VARCHAR(300),
+        currentRank VARCHAR(100),
+        budget VARCHAR(100),
+        memo TEXT,
+        status ENUM('new','contacted','done') NOT NULL DEFAULT 'new',
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (e) {
+    console.warn("[Migration] consulting_requests table:", e);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS deposit_transactions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        userId INT NOT NULL,
+        amount INT NOT NULL,
+        type ENUM('charge','deduct','campaign','refund') NOT NULL,
+        balanceAfter INT NOT NULL,
+        memo VARCHAR(255),
+        createdBy INT,
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (e) {
+    console.warn("[Migration] deposit_transactions table:", e);
+  }
+
+  // Assign memberCode to existing members that don't have one yet
+  await assignMissingMemberCodes(db);
+}
+
+async function assignMissingMemberCodes(db: ReturnType<typeof drizzle>) {
+  const rows = await db
+    .select({ id: users.id, memberCode: users.memberCode })
+    .from(users)
+    .orderBy(users.id);
+
+  // Find max existing numeric suffix
+  let max = 0;
+  for (const row of rows) {
+    const m = row.memberCode?.match(/^A-(\d+)$/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > max) max = n;
+    }
+  }
+
+  // Assign codes to those without one
+  for (const row of rows) {
+    if (!row.memberCode) {
+      max += 1;
+      const code = `A-${String(max).padStart(3, "0")}`;
+      await db.update(users).set({ memberCode: code }).where(eq(users.id, row.id));
+    }
+  }
 }
 
 export async function upsertUser(user: InsertUser): Promise<void> {
@@ -123,6 +225,9 @@ export async function createMember(member: {
   fullName: string;
   phone: string;
   role?: "user" | "business" | "admin";
+  bankName?: string;
+  bankAccount?: string;
+  bankHolder?: string;
 }) {
   const db = await getDb();
   if (!db) {
@@ -130,6 +235,7 @@ export async function createMember(member: {
   }
 
   const role = member.openId === ENV.ownerOpenId ? "admin" : (member.role ?? "user");
+  const memberCode = await generateNextMemberCode();
 
   await db.insert(users).values({
     openId: member.openId,
@@ -141,6 +247,10 @@ export async function createMember(member: {
     loginMethod: "local",
     role,
     lastSignedIn: new Date(),
+    bankName: member.bankName,
+    bankAccount: member.bankAccount,
+    bankHolder: member.bankHolder,
+    memberCode,
   });
 
   return getUserByLoginId(member.loginId);
@@ -175,6 +285,29 @@ export async function setUserRole(id: number, role: "user" | "admin") {
   if (!db) throw new Error("Database not available");
   await db.update(users).set({ role }).where(eq(users.id, id));
   return getUserById(id);
+}
+
+export async function setMemberCode(id: number, memberCode: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ memberCode }).where(eq(users.id, id));
+  return getUserById(id);
+}
+
+/** Generate next member code in A-001 format by scanning existing codes. */
+export async function generateNextMemberCode(): Promise<string> {
+  const db = await getDb();
+  if (!db) return "A-001";
+  const rows = await db.select({ memberCode: users.memberCode }).from(users);
+  let max = 0;
+  for (const row of rows) {
+    const m = row.memberCode?.match(/^A-(\d+)$/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > max) max = n;
+    }
+  }
+  return `A-${String(max + 1).padStart(3, "0")}`;
 }
 
 // === Campaigns ===
@@ -316,18 +449,21 @@ export async function listParticipationsByUser(userId: number) {
     .orderBy(desc(participations.appliedAt));
 }
 
-/** All participations (admin view), optionally filtered by campaign. */
-export async function listParticipations(opts?: { campaignId?: number }) {
+/** All participations (admin view), optionally filtered by campaign and/or status. */
+export async function listParticipations(opts?: { campaignId?: number; status?: string }) {
   const db = await getDb();
   if (!db) return [];
-  if (opts?.campaignId) {
-    return db
-      .select()
-      .from(participations)
-      .where(eq(participations.campaignId, opts.campaignId))
-      .orderBy(desc(participations.appliedAt));
+  const conditions = [];
+  if (opts?.campaignId) conditions.push(eq(participations.campaignId, opts.campaignId));
+  if (opts?.status) conditions.push(eq(participations.status, opts.status as any));
+  if (conditions.length === 0) {
+    return db.select().from(participations).orderBy(desc(participations.appliedAt));
   }
-  return db.select().from(participations).orderBy(desc(participations.appliedAt));
+  return db
+    .select()
+    .from(participations)
+    .where(conditions.length === 1 ? conditions[0] : and(...conditions))
+    .orderBy(desc(participations.appliedAt));
 }
 
 // === Messages ===
@@ -350,6 +486,146 @@ export async function createMessage(data: InsertMessage) {
     ?? (result as unknown as { insertId: number }).insertId;
   const rows = await db.select().from(messages).where(eq(messages.id, Number(insertId))).limit(1);
   return rows[0];
+}
+
+// === Direct Messages ===
+
+export async function listDirectMessages(reviewerId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(directMessages)
+    .where(eq(directMessages.reviewerId, reviewerId))
+    .orderBy(directMessages.createdAt);
+}
+
+export async function createDirectMessage(data: InsertDirectMessage) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(directMessages).values(data);
+  const insertId = (result as unknown as { insertId: number }[])[0]?.insertId
+    ?? (result as unknown as { insertId: number }).insertId;
+  const rows = await db.select().from(directMessages).where(eq(directMessages.id, Number(insertId))).limit(1);
+  return rows[0];
+}
+
+export async function markDirectMessagesRead(reviewerId: number, readerUserId: number) {
+  const db = await getDb();
+  if (!db) return;
+  // Only mark messages sent by the OTHER party as read (not the reader's own messages)
+  await db
+    .update(directMessages)
+    .set({ readAt: new Date() })
+    .where(
+      and(
+        eq(directMessages.reviewerId, reviewerId),
+        isNull(directMessages.readAt),
+        ne(directMessages.fromUserId, readerUserId),
+      )
+    );
+}
+
+/** For admin: list all unique reviewers who have a conversation, with latest message. */
+export async function listDirectConversations() {
+  const db = await getDb();
+  if (!db) return [];
+  const all = await db
+    .select()
+    .from(directMessages)
+    .orderBy(desc(directMessages.createdAt));
+  // dedupe by reviewerId — keep latest message per reviewer
+  const map = new Map<number, typeof all[0]>();
+  for (const m of all) {
+    if (!map.has(m.reviewerId)) map.set(m.reviewerId, m);
+  }
+  return Array.from(map.values());
+}
+
+export async function countUnreadDirectMessages(reviewerId: number, readerUserId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db
+    .select()
+    .from(directMessages)
+    .where(
+      and(
+        eq(directMessages.reviewerId, reviewerId),
+        isNull(directMessages.readAt),
+      )
+    );
+  // unread = sent by the other party and not yet read
+  return rows.filter(m => m.fromUserId !== readerUserId).length;
+}
+
+// === Consulting Requests (상위노출 문의) ===
+
+export async function createConsultingRequest(data: InsertConsultingRequest) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(consultingRequests).values(data);
+  const insertId = (result as unknown as { insertId: number }[])[0]?.insertId
+    ?? (result as unknown as { insertId: number }).insertId;
+  const rows = await db.select().from(consultingRequests).where(eq(consultingRequests.id, Number(insertId))).limit(1);
+  return rows[0];
+}
+
+export async function listConsultingRequests() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(consultingRequests).orderBy(desc(consultingRequests.createdAt));
+}
+
+export async function setConsultingRequestStatus(id: number, status: "new" | "contacted" | "done") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(consultingRequests).set({ status }).where(eq(consultingRequests.id, id));
+  const rows = await db.select().from(consultingRequests).where(eq(consultingRequests.id, id)).limit(1);
+  return rows[0];
+}
+
+// === Deposits (예치금) ===
+
+/**
+ * Adjust a user's deposit balance by `amount` (can be negative) and record a
+ * ledger entry. Throws if the resulting balance would be negative.
+ * Returns the new balance.
+ */
+export async function adjustDeposit(opts: {
+  userId: number;
+  amount: number;
+  type: "charge" | "deduct" | "campaign" | "refund";
+  memo?: string;
+  createdBy?: number;
+}): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const user = await getUserById(opts.userId);
+  if (!user) throw new Error("회원을 찾을 수 없습니다.");
+  const current = user.depositBalance ?? 0;
+  const next = current + opts.amount;
+  if (next < 0) throw new Error("예치금 잔액이 부족합니다.");
+
+  await db.update(users).set({ depositBalance: next }).where(eq(users.id, opts.userId));
+  await db.insert(depositTransactions).values({
+    userId: opts.userId,
+    amount: opts.amount,
+    type: opts.type,
+    balanceAfter: next,
+    memo: opts.memo ?? null,
+    createdBy: opts.createdBy ?? null,
+  });
+  return next;
+}
+
+export async function listDepositTransactions(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(depositTransactions)
+    .where(eq(depositTransactions.userId, userId))
+    .orderBy(desc(depositTransactions.createdAt));
 }
 
 export async function countUnreadMessages(participationId: number, viewerId: number) {

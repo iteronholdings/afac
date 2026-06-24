@@ -4,30 +4,35 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
-import { Building2, Loader2, Lock, User } from "lucide-react";
+import { Loader2, Lock, User } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 
-type Role = "user" | "business";
-
-const ROLE_TABS: { value: Role; icon: React.ElementType; label: string }[] = [
-  { value: "user", icon: User, label: "리뷰어" },
-  { value: "business", icon: Building2, label: "업체" },
-];
-
 export default function Login() {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
-  const [role, setRole] = useState<Role>("user");
   const [loginId, setLoginId] = useState("");
   const [password, setPassword] = useState("");
 
+  const logoutMutation = trpc.auth.logout.useMutation();
+
   const loginMutation = trpc.auth.login.useMutation({
     onSuccess: async () => {
-      await utils.auth.me.invalidate();
+      const me = await utils.auth.me.fetch();
+      // 리뷰어 전용 포털 — 업체 계정은 거부하고 업체 포털로 안내.
+      if (me?.role === "business") {
+        await logoutMutation.mutateAsync();
+        await utils.auth.me.invalidate();
+        toast.error("업체 계정입니다. 업체 포털(/client/login)에서 로그인해 주세요.");
+        return;
+      }
       toast.success("로그인되었습니다.");
-      navigate("/");
+      if (me?.role === "admin") {
+        navigate("/admin");
+      } else {
+        navigate("/home");
+      }
     },
     onError: (error: unknown) => {
       const message =
@@ -54,35 +59,12 @@ export default function Login() {
       footer={
         <>
           아직 회원이 아니신가요?{" "}
-          <Link href="/signup" className="font-semibold text-primary hover:underline">
+          <Link href="/afreviewer/signup" className="font-semibold text-primary hover:underline">
             회원가입
           </Link>
         </>
       }
     >
-      {/* 역할 탭 */}
-      <div className="mb-6 flex rounded-2xl border border-border/70 bg-muted/50 p-1 gap-1">
-        {ROLE_TABS.map(t => {
-          const Icon = t.icon;
-          const active = role === t.value;
-          return (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => setRole(t.value)}
-              className={`flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold transition-all ${
-                active
-                  ? "bg-background text-primary shadow-sm ring-1 ring-border/60"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <Icon className="h-4 w-4" />
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="loginId">아이디</Label>
@@ -121,7 +103,7 @@ export default function Login() {
           disabled={loginMutation.isPending}
         >
           {loginMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {role === "user" ? "리뷰어" : "업체"}로 로그인
+          로그인
         </Button>
       </form>
     </AuthLayout>

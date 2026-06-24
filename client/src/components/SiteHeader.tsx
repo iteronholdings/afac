@@ -33,7 +33,7 @@ export default function SiteHeader() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="container flex h-16 items-center justify-between gap-4">
-        <Link href={user?.role === "business" ? "/business" : "/"}>
+        <Link href={user?.role === "business" ? "/client/dashboard" : "/home"}>
           <BrandLogo size={38} textClassName="text-lg" />
         </Link>
 
@@ -105,7 +105,7 @@ export default function SiteHeader() {
                 )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  onClick={() => logout()}
+                  onClick={() => logout("/afreviewer/login")}
                   className="text-destructive focus:text-destructive"
                 >
                   <LogOut className="mr-2 h-4 w-4" />
@@ -115,12 +115,12 @@ export default function SiteHeader() {
             </DropdownMenu>
           ) : (
             <div className="hidden items-center gap-2 sm:flex">
-              <Link href="/login">
+              <Link href="/afreviewer/login">
                 <Button variant="ghost" className="font-medium">
                   로그인
                 </Button>
               </Link>
-              <Link href="/signup">
+              <Link href="/afreviewer/signup">
                 <Button className="rounded-full font-semibold">회원가입</Button>
               </Link>
             </div>

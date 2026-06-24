@@ -37,9 +37,9 @@ export default function Home() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
 
-  // 업체 계정이면 업체 대시보드로 이동
+  // 업체 계정이면 업체 전용 대시보드로 이동 (포털 분리)
   useEffect(() => {
-    if (user?.role === "business") navigate("/business");
+    if (user?.role === "business") navigate("/client/dashboard");
   }, [user?.role, navigate]);
   const utils = trpc.useUtils();
 

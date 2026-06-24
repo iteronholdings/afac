@@ -1,6 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import AdminLayout from "@/components/AdminLayout";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -10,17 +11,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
-import { Crown, Shield, ShieldCheck, ShieldOff, Users } from "lucide-react";
+import { Check, Crown, MessageCircle, Pencil, Shield, ShieldCheck, ShieldOff, Users, X } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
 
 export default function AdminMembers() {
   const utils = trpc.useUtils();
   const { user } = useAuth();
-  const { data: members, isLoading } = trpc.admin.listMembers.useQuery();
+  const { data: allMembers, isLoading } = trpc.admin.listMembers.useQuery();
+  // 리뷰어 관리 — 업체(비즈니스) 계정은 '업체 관리'에서 따로 관리.
+  const members = allMembers?.filter(m => m.role !== "business");
 
-  // The owner's openId is exposed on the current user via auth.me; we detect
-  // "am I the owner" by checking whether my own row is flagged isOwner.
-  const iAmOwner = !!members?.find(m => m.isSelf)?.isOwner;
+  const iAmOwner = !!allMembers?.find(m => m.isSelf)?.isOwner;
+
+  // memberCode inline edit state: memberId → draft string
+  const [editingCode, setEditingCode] = useState<Record<number, string>>({});
 
   const setRoleMutation = trpc.admin.setRole.useMutation({
     onSuccess: () => {
@@ -30,10 +35,19 @@ export default function AdminMembers() {
     onError: err => toast.error(err.message),
   });
 
+  const setCodeMutation = trpc.admin.setMemberCode.useMutation({
+    onSuccess: (_, vars) => {
+      utils.admin.listMembers.invalidate();
+      setEditingCode(prev => { const n = { ...prev }; delete n[vars.userId]; return n; });
+      toast.success("회원 코드가 저장되었습니다.");
+    },
+    onError: err => toast.error(err.message),
+  });
+
   return (
     <AdminLayout
-      title="회원 관리"
-      description="가입한 회원을 확인하고 관리자 권한을 부여하거나 회수합니다."
+      title="리뷰어 관리"
+      description="리뷰어 회원을 확인하고 관리자 권한을 부여하거나 회수합니다. (업체는 '업체 관리'에서)"
     >
       {!iAmOwner && (
         <div className="mb-4 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -66,6 +80,8 @@ export default function AdminMembers() {
                 <TableHead className="hidden sm:table-cell">아이디</TableHead>
                 <TableHead className="hidden md:table-cell">전화번호</TableHead>
                 <TableHead>권한</TableHead>
+                <TableHead>코드</TableHead>
+                <TableHead className="text-right">채팅</TableHead>
                 <TableHead className="text-right">관리</TableHead>
               </TableRow>
             </TableHeader>
@@ -111,6 +127,64 @@ export default function AdminMembers() {
                       <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
                         리뷰어
                       </span>
+                    )}
+                  </TableCell>
+                  {/* 회원 코드 셀 */}
+                  <TableCell>
+                    {editingCode[m.id] !== undefined ? (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          value={editingCode[m.id]}
+                          onChange={e => setEditingCode(prev => ({ ...prev, [m.id]: e.target.value }))}
+                          className="h-7 w-24 px-2 text-xs"
+                          placeholder="A-001"
+                          onKeyDown={e => {
+                            if (e.key === "Enter") setCodeMutation.mutate({ userId: m.id, memberCode: editingCode[m.id] });
+                            if (e.key === "Escape") setEditingCode(prev => { const n = { ...prev }; delete n[m.id]; return n; });
+                          }}
+                        />
+                        <button
+                          className="text-green-600 hover:text-green-700"
+                          onClick={() => setCodeMutation.mutate({ userId: m.id, memberCode: editingCode[m.id] })}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => setEditingCode(prev => { const n = { ...prev }; delete n[m.id]; return n; })}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="flex items-center gap-1.5 group"
+                        onClick={() => setEditingCode(prev => ({ ...prev, [m.id]: m.memberCode ?? "" }))}
+                      >
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-mono font-medium text-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                          {m.memberCode ?? "미지정"}
+                        </span>
+                        <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </button>
+                    )}
+                  </TableCell>
+
+                  <TableCell className="text-right">
+                    {!m.isSelf && m.role !== "admin" && !m.isOwner ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="bg-card"
+                        onClick={() =>
+                          window.dispatchEvent(
+                            new CustomEvent("open-dm", { detail: { reviewerId: m.id, reviewerName: m.fullName || m.name || m.loginId } })
+                          )
+                        }
+                      >
+                        <MessageCircle className="mr-1.5 h-3.5 w-3.5" /> 채팅
+                      </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
                     )}
                   </TableCell>
                   <TableCell className="text-right">

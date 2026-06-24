@@ -31,6 +31,7 @@ export const adminRouter = router({
       loginMethod: u.loginMethod,
       createdAt: u.createdAt,
       lastSignedIn: u.lastSignedIn,
+      memberCode: u.memberCode ?? null,
       isOwner: isOwner(u.loginId),
       isSelf: u.id === ctx.user.id,
     }));
@@ -62,4 +63,84 @@ export const adminRouter = router({
 
       return db.setUserRole(input.userId, input.role);
     }),
+
+  setMemberCode: adminProcedure
+    .input(z.object({ userId: z.number().int(), memberCode: z.string().max(20) }))
+    .mutation(async ({ input }) => {
+      return db.setMemberCode(input.userId, input.memberCode.trim());
+    }),
+
+  // === 업체 관리 (deposits) ===
+
+  /** 업체(비즈니스) 계정 목록 + 예치금 잔액. */
+  listBusinesses: adminProcedure.query(async () => {
+    const rows = await db.listAllUsers();
+    return rows
+      .filter(u => u.role === "business")
+      .map(u => ({
+        id: u.id,
+        loginId: u.loginId,
+        fullName: u.fullName ?? u.name ?? "-",
+        phone: u.phone ?? "-",
+        memberCode: u.memberCode ?? null,
+        depositBalance: u.depositBalance ?? 0,
+        createdAt: u.createdAt,
+      }));
+  }),
+
+  /** 예치금 추가/차감. amount는 양수, action으로 방향 결정. */
+  adjustDeposit: adminProcedure
+    .input(z.object({
+      userId: z.number().int(),
+      amount: z.number().int().positive("금액을 입력해 주세요."),
+      action: z.enum(["charge", "deduct"]),
+      memo: z.string().max(255).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const delta = input.action === "charge" ? input.amount : -input.amount;
+      const balance = await db.adjustDeposit({
+        userId: input.userId,
+        amount: delta,
+        type: input.action,
+        memo: input.memo?.trim() || (input.action === "charge" ? "관리자 충전" : "관리자 차감"),
+        createdBy: ctx.user.id,
+      });
+      return { balance };
+    }),
+
+  /** 특정 업체의 예치금 거래 내역. */
+  depositLog: adminProcedure
+    .input(z.object({ userId: z.number().int() }))
+    .query(async ({ input }) => db.listDepositTransactions(input.userId)),
+
+  /** 정산 대기 목록: approved 상태의 참여자 + 리뷰어 계좌 정보 */
+  settlementList: adminProcedure.query(async () => {
+    const parts = await db.listParticipations({ status: "approved" });
+    return Promise.all(
+      parts.map(async p => {
+        const campaign = await db.getCampaignById(p.campaignId);
+        const user = await db.getUserById(p.userId);
+        const payout = campaign
+          ? (campaign.productPrice ?? 0) + (campaign.commission ?? 0)
+          : 0;
+        return {
+          participationId: p.id,
+          approvedAt: p.approvedAt,
+          payout,
+          campaignTitle: campaign?.title ?? "-",
+          user: user
+            ? {
+                id: user.id,
+                fullName: user.fullName ?? user.name ?? "-",
+                loginId: user.loginId ?? "-",
+                memberCode: user.memberCode ?? "-",
+                bankName: user.bankName ?? "-",
+                bankAccount: user.bankAccount ?? "-",
+                bankHolder: user.bankHolder ?? "-",
+              }
+            : null,
+        };
+      })
+    );
+  }),
 });
