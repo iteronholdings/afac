@@ -16,11 +16,26 @@ export const participationRouter = router({
     const parts = await db.listParticipationsByUser(ctx.user.id);
     return Promise.all(
       parts.map(async p => {
+        // Strip the heavy assigned-packet base64; expose a flag instead.
+        const { assignedPacket, ...rest } = p;
         const campaign = await db.getCampaignById(p.campaignId);
-        return { ...p, campaign };
+        // Drop the business's full guide ZIP from the reviewer payload.
+        const camp = campaign ? (({ photoGuideZip, ...c }) => c)(campaign) : campaign;
+        return { ...rest, hasPacket: !!assignedPacket, campaign: camp };
       })
     );
   }),
+
+  /** Reviewer: download their assigned photo-review packet for a participation. */
+  myPacket: protectedProcedure
+    .input(z.object({ participationId: z.number().int() }))
+    .query(async ({ ctx, input }) => {
+      const p = await db.getParticipationById(input.participationId);
+      if (!p || p.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
+      }
+      return { name: p.assignedName ?? "guide.zip", dataUrl: p.assignedPacket ?? null };
+    }),
 
   // Reviewer: apply to a campaign.
   join: protectedProcedure

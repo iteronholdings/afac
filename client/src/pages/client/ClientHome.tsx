@@ -16,13 +16,17 @@ import { Link, useLocation } from "wouter";
 const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
   pending: "승인 대기",
   open: "모집 중",
-  closed: "마감",
+  in_progress: "작업 진행",
+  error: "오류",
+  closed: "작업 완료",
   rejected: "반려",
 };
 const CAMPAIGN_STATUS_BADGE: Record<string, string> = {
   pending: "bg-amber-100 text-amber-700",
   open: "bg-primary/15 text-primary",
-  closed: "bg-muted text-muted-foreground",
+  in_progress: "bg-blue-100 text-blue-700",
+  error: "bg-destructive/10 text-destructive",
+  closed: "bg-emerald-100 text-emerald-700",
   rejected: "bg-destructive/10 text-destructive",
 };
 

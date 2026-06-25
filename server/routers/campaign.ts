@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import JSZip from "jszip";
 import { z } from "zod";
 import * as db from "../db";
 import { adminProcedure, businessProcedure, protectedProcedure, publicProcedure, router } from "../_core/trpc";
@@ -104,7 +105,7 @@ export const campaignRouter = router({
 
   // Admin: toggle status (open/closed/pending/rejected).
   setStatus: adminProcedure
-    .input(z.object({ id: z.number().int(), status: z.enum(["pending", "open", "closed", "rejected"]) }))
+    .input(z.object({ id: z.number().int(), status: z.enum(["pending", "open", "closed", "rejected", "in_progress", "error"]) }))
     .mutation(async ({ input }) => {
       const existing = await db.getCampaignById(input.id);
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
@@ -200,11 +201,76 @@ export const campaignRouter = router({
     const withCounts = await Promise.all(
       rows.map(async c => {
         const taken = await db.countActiveParticipations(c.id);
-        return { ...c, taken, remaining: Math.max(0, c.slots - taken) };
+        // Strip the heavy guide ZIP from the list payload; expose a flag.
+        const { photoGuideZip, ...rest } = c;
+        return { ...rest, hasPhotoGuideZip: !!photoGuideZip, taken, remaining: Math.max(0, c.slots - taken) };
       })
     );
     return withCounts;
   }),
+
+  // Business/Admin: decompress the uploaded photo-guide ZIP and assign one
+  // top-level unit (folder or file) to each reviewer in order (a방식).
+  assignZipPackets: businessProcedure
+    .input(z.object({ campaignId: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      const campaign = await db.getCampaignById(input.campaignId);
+      if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
+      if (ctx.user.role !== "admin" && campaign.createdBy !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
+      }
+      if (!campaign.photoGuideZip) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "업로드된 사진 리뷰 ZIP이 없습니다." });
+      }
+
+      // Decode base64 data URL → Buffer → load ZIP.
+      const b64 = campaign.photoGuideZip.includes(",")
+        ? campaign.photoGuideZip.split(",")[1]
+        : campaign.photoGuideZip;
+      let zip: JSZip;
+      try {
+        zip = await JSZip.loadAsync(Buffer.from(b64, "base64"));
+      } catch {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "ZIP 파일을 열 수 없습니다." });
+      }
+
+      // Group non-folder entries by their top-level segment = one unit per reviewer.
+      const units = new Map<string, { path: string; file: JSZip.JSZipObject }[]>();
+      zip.forEach((relPath, file) => {
+        if (file.dir) return;
+        const top = relPath.split("/")[0];
+        if (!units.has(top)) units.set(top, []);
+        units.get(top)!.push({ path: relPath, file });
+      });
+      const unitList = Array.from(units.entries()); // [name, files][]
+      if (unitList.length === 0) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "ZIP 안에 파일이 없습니다." });
+      }
+
+      // Active participants, first-come order.
+      const parts = (await db.listParticipationsByCampaign(input.campaignId))
+        .filter(p => p.status !== "rejected")
+        .sort((a, b) => new Date(a.appliedAt).getTime() - new Date(b.appliedAt).getTime());
+
+      let assigned = 0;
+      for (let i = 0; i < parts.length && i < unitList.length; i++) {
+        const [unitName, files] = unitList[i];
+        const out = new JSZip();
+        for (const { path, file } of files) {
+          // strip the top folder prefix so the reviewer's zip is clean
+          const rel = path.startsWith(unitName + "/") ? path.slice(unitName.length + 1) : path;
+          out.file(rel || unitName, await file.async("uint8array"));
+        }
+        const packetB64 = await out.generateAsync({ type: "base64", compression: "DEFLATE" });
+        await db.updateParticipation(parts[i].id, {
+          assignedPacket: `data:application/zip;base64,${packetB64}`,
+          assignedName: `${unitName}.zip`,
+        });
+        assigned++;
+      }
+
+      return { assigned, units: unitList.length, participants: parts.length };
+    }),
 
   // Business: list participations for a campaign they own (with proof photos).
   campaignParticipants: businessProcedure

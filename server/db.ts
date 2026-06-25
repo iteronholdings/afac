@@ -1,10 +1,12 @@
 import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
+  businessMessages,
   campaigns,
   consultingRequests,
   depositTransactions,
   directMessages,
+  InsertBusinessMessage,
   InsertCampaign,
   InsertConsultingRequest,
   InsertDirectMessage,
@@ -52,6 +54,8 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE campaigns ADD COLUMN photoGuideZip LONGTEXT`,
     sql`ALTER TABLE campaigns ADD COLUMN photoGuideZipName VARCHAR(255)`,
     sql`ALTER TABLE users ADD COLUMN depositBalance INT NOT NULL DEFAULT 0`,
+    sql`ALTER TABLE participations ADD COLUMN assignedPacket LONGTEXT`,
+    sql`ALTER TABLE participations ADD COLUMN assignedName VARCHAR(255)`,
   ];
   for (const stmt of alterStatements) {
     try {
@@ -97,6 +101,29 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     `);
   } catch (e) {
     console.warn("[Migration] deposit_transactions table:", e);
+  }
+
+  try {
+    await db.execute(sql`ALTER TABLE campaigns MODIFY COLUMN status ENUM('pending','open','closed','rejected','in_progress','error') NOT NULL DEFAULT 'open'`);
+  } catch (e) {
+    console.warn("[Migration] campaigns.status enum:", e);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS business_messages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        businessId INT NOT NULL,
+        reviewerId INT NOT NULL,
+        fromUserId INT NOT NULL,
+        content TEXT,
+        imageUrl LONGTEXT,
+        readAt TIMESTAMP NULL,
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (e) {
+    console.warn("[Migration] business_messages table:", e);
   }
 
   // Assign memberCode to existing members that don't have one yet
@@ -291,6 +318,14 @@ export async function setMemberCode(id: number, memberCode: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(users).set({ memberCode }).where(eq(users.id, id));
+  return getUserById(id);
+}
+
+/** Admin: reset a member's password (hash is computed in the router). */
+export async function setMemberPasswordHash(id: number, passwordHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ passwordHash }).where(eq(users.id, id));
   return getUserById(id);
 }
 
@@ -582,6 +617,74 @@ export async function setConsultingRequestStatus(id: number, status: "new" | "co
   await db.update(consultingRequests).set({ status }).where(eq(consultingRequests.id, id));
   const rows = await db.select().from(consultingRequests).where(eq(consultingRequests.id, id)).limit(1);
   return rows[0];
+}
+
+// === Business ↔ Reviewer messages (업체-리뷰어 채팅) ===
+
+export async function listBusinessMessages(businessId: number, reviewerId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(businessMessages)
+    .where(and(eq(businessMessages.businessId, businessId), eq(businessMessages.reviewerId, reviewerId)))
+    .orderBy(businessMessages.createdAt);
+}
+
+export async function createBusinessMessage(data: InsertBusinessMessage) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(businessMessages).values(data);
+  const insertId = (result as unknown as { insertId: number }[])[0]?.insertId
+    ?? (result as unknown as { insertId: number }).insertId;
+  const rows = await db.select().from(businessMessages).where(eq(businessMessages.id, Number(insertId))).limit(1);
+  return rows[0];
+}
+
+export async function markBusinessMessagesRead(businessId: number, reviewerId: number, readerUserId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(businessMessages)
+    .set({ readAt: new Date() })
+    .where(
+      and(
+        eq(businessMessages.businessId, businessId),
+        eq(businessMessages.reviewerId, reviewerId),
+        isNull(businessMessages.readAt),
+        ne(businessMessages.fromUserId, readerUserId),
+      )
+    );
+}
+
+/** All business-message rows involving a user (as business or reviewer), newest first. */
+export async function listBusinessConversations(userId: number, asRole: "business" | "user") {
+  const db = await getDb();
+  if (!db) return [];
+  const col = asRole === "business" ? businessMessages.businessId : businessMessages.reviewerId;
+  const all = await db
+    .select()
+    .from(businessMessages)
+    .where(eq(col, userId))
+    .orderBy(desc(businessMessages.createdAt));
+  // dedupe by the OTHER party — keep latest message per conversation
+  const map = new Map<number, typeof all[0]>();
+  for (const m of all) {
+    const other = asRole === "business" ? m.reviewerId : m.businessId;
+    if (!map.has(other)) map.set(other, m);
+  }
+  return Array.from(map.values());
+}
+
+export async function countUnreadBusinessMessages(userId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db
+    .select()
+    .from(businessMessages)
+    .where(and(isNull(businessMessages.readAt), ne(businessMessages.fromUserId, userId)));
+  // unread = messages in conversations where I'm a participant, sent by the other party
+  return rows.filter(m => m.businessId === userId || m.reviewerId === userId).length;
 }
 
 // === Deposits (예치금) ===

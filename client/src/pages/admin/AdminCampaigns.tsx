@@ -14,8 +14,25 @@ import {
 import { trpc } from "@/lib/trpc";
 import { formatKRW, totalPayout } from "@/lib/workflow";
 import { ImageOff, Megaphone, Pencil, Plus, Trash2, Users } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
+
+const STATUS_META: Record<string, { label: string; badge: string }> = {
+  pending:     { label: "승인대기", badge: "bg-yellow-400 text-yellow-900" },
+  open:        { label: "승인완료", badge: "bg-primary text-primary-foreground shadow-sm" },
+  in_progress: { label: "작업진행", badge: "bg-blue-500 text-white" },
+  error:       { label: "오류",     badge: "bg-destructive text-white" },
+  closed:      { label: "작업완료", badge: "bg-emerald-600 text-white" },
+  rejected:    { label: "반려",     badge: "bg-destructive/80 text-white" },
+};
+
+const BUCKETS = [
+  { key: "pending",     label: "승인대기", dot: "bg-yellow-400",      ring: "ring-yellow-400",  match: (s: string) => s === "pending" },
+  { key: "open",        label: "승인완료", dot: "bg-primary",         ring: "ring-primary",     match: (s: string) => s === "open" },
+  { key: "in_progress", label: "작업진행", dot: "bg-blue-500",        ring: "ring-blue-500",    match: (s: string) => s === "in_progress" },
+  { key: "error",       label: "오류",     dot: "bg-destructive",     ring: "ring-destructive", match: (s: string) => s === "error" || s === "rejected" },
+  { key: "closed",      label: "작업완료", dot: "bg-emerald-600",     ring: "ring-emerald-600", match: (s: string) => s === "closed" },
+] as const;
 
 export default function AdminCampaigns() {
   const utils = trpc.useUtils();
@@ -24,6 +41,20 @@ export default function AdminCampaigns() {
   const [editing, setEditing] = useState<Partial<CampaignFormValue> | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
+  const [filter, setFilter] = useState<string | null>(null);
+
+  const counts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const b of BUCKETS) map[b.key] = (campaigns ?? []).filter(c => b.match(c.status)).length;
+    return map;
+  }, [campaigns]);
+
+  const filtered = useMemo(() => {
+    if (!campaigns) return [];
+    if (!filter) return campaigns;
+    const b = BUCKETS.find(x => x.key === filter);
+    return b ? campaigns.filter(c => b.match(c.status)) : campaigns;
+  }, [campaigns, filter]);
 
   const setStatusMutation = trpc.campaign.setStatus.useMutation({
     onSuccess: () => {
@@ -74,6 +105,35 @@ export default function AdminCampaigns() {
         </Button>
       }
     >
+      {/* 상태 대시보드 */}
+      {!isLoading && campaigns && campaigns.length > 0 && (
+        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {BUCKETS.map(b => {
+            const active = filter === b.key;
+            return (
+              <button
+                key={b.key}
+                onClick={() => setFilter(active ? null : b.key)}
+                className={`rounded-2xl border bg-card px-4 py-3.5 text-left shadow-sm transition-all ${
+                  active ? `border-transparent ring-2 ${b.ring}` : "border-border/70 hover:-translate-y-0.5 hover:shadow"
+                }`}
+              >
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                  <span className={`h-2 w-2 rounded-full ${b.dot}`} /> {b.label}
+                </span>
+                <p className="mt-1 text-2xl font-extrabold text-foreground">{counts[b.key] ?? 0}</p>
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {filter && (
+        <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+          <span>'{BUCKETS.find(b => b.key === filter)?.label}' 상태만 표시 중</span>
+          <button onClick={() => setFilter(null)} className="font-semibold text-primary hover:underline">전체 보기</button>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -95,9 +155,13 @@ export default function AdminCampaigns() {
             <Plus className="mr-1.5 h-4 w-4" /> 새 캠페인 등록
           </Button>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="rounded-3xl border border-dashed border-border bg-card py-16 text-center text-sm text-muted-foreground">
+          해당 상태의 캠페인이 없습니다.
+        </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {campaigns.map(c => (
+          {filtered.map(c => (
             <div
               key={c.id}
               className="flex flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm transition hover:shadow-md"
@@ -112,16 +176,10 @@ export default function AdminCampaigns() {
                 )}
                 <span
                   className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                    c.status === "open" ? "bg-primary text-primary-foreground shadow-sm"
-                    : c.status === "pending" ? "bg-yellow-400 text-yellow-900"
-                    : c.status === "rejected" ? "bg-destructive/80 text-white"
-                    : "bg-muted text-muted-foreground"
+                    STATUS_META[c.status]?.badge ?? "bg-muted text-muted-foreground"
                   }`}
                 >
-                  {c.status === "open" ? "모집 중"
-                    : c.status === "pending" ? "승인 대기"
-                    : c.status === "rejected" ? "반려"
-                    : "마감"}
+                  {STATUS_META[c.status]?.label ?? c.status}
                 </span>
               </div>
 
@@ -178,28 +236,48 @@ export default function AdminCampaigns() {
                       </Button>
                     </div>
                   ) : (
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 bg-card"
-                      onClick={() => openEdit(c)}
-                    >
+                  <div className="flex flex-col gap-2">
+                    {/* 상태 전환 */}
+                    <div className="flex gap-2">
+                      {c.status === "open" && (
+                        <Button size="sm" className="flex-1" disabled={setStatusMutation.isPending}
+                          onClick={() => setStatusMutation.mutate({ id: c.id, status: "in_progress" })}>
+                          작업 진행
+                        </Button>
+                      )}
+                      {c.status === "in_progress" && (
+                        <>
+                          <Button size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700" disabled={setStatusMutation.isPending}
+                            onClick={() => setStatusMutation.mutate({ id: c.id, status: "closed" })}>
+                            작업 완료
+                          </Button>
+                          <Button size="sm" variant="outline" className="flex-1 bg-card text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={setStatusMutation.isPending}
+                            onClick={() => setStatusMutation.mutate({ id: c.id, status: "error" })}>
+                            오류
+                          </Button>
+                        </>
+                      )}
+                      {c.status === "error" && (
+                        <Button size="sm" className="flex-1" disabled={setStatusMutation.isPending}
+                          onClick={() => setStatusMutation.mutate({ id: c.id, status: "in_progress" })}>
+                          작업 재개
+                        </Button>
+                      )}
+                      {c.status === "closed" && (
+                        <Button size="sm" variant="ghost" className="flex-1" disabled={setStatusMutation.isPending}
+                          onClick={() => setStatusMutation.mutate({ id: c.id, status: "open" })}>
+                          모집 재개
+                        </Button>
+                      )}
+                      {c.status === "rejected" && (
+                        <Button size="sm" className="flex-1" disabled={setStatusMutation.isPending}
+                          onClick={() => setStatusMutation.mutate({ id: c.id, status: "open" })}>
+                          다시 승인
+                        </Button>
+                      )}
+                    </div>
+                    <Button variant="outline" size="sm" className="bg-card" onClick={() => openEdit(c)}>
                       <Pencil className="mr-1.5 h-3.5 w-3.5" /> 수정
-                    </Button>
-                    <Button
-                      variant={c.status === "open" ? "ghost" : "default"}
-                      size="sm"
-                      className="flex-1"
-                      disabled={setStatusMutation.isPending}
-                      onClick={() =>
-                        setStatusMutation.mutate({
-                          id: c.id,
-                          status: c.status === "open" ? "closed" : "open",
-                        })
-                      }
-                    >
-                      {c.status === "open" ? "모집 마감" : "모집 재개"}
                     </Button>
                   </div>
                   )}

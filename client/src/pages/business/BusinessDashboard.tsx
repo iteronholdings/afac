@@ -1,3 +1,4 @@
+import BusinessChatDialog from "@/components/BusinessChatDialog";
 import ClientLayout from "@/components/ClientLayout";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,24 +12,32 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
+  FolderArchive,
   ImageIcon,
+  Loader2,
+  MessageCircle,
   PackagePlus,
   Search,
   Users,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { useLocation } from "wouter";
 
 const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
   pending: "승인 대기",
   open: "모집 중",
-  closed: "마감",
+  in_progress: "작업 진행",
+  error: "오류",
+  closed: "작업 완료",
   rejected: "반려",
 };
 const CAMPAIGN_STATUS_BADGE: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-800",
   open: "bg-green-100 text-green-800",
-  closed: "bg-gray-100 text-gray-600",
+  in_progress: "bg-blue-100 text-blue-700",
+  error: "bg-red-100 text-red-700",
+  closed: "bg-emerald-100 text-emerald-700",
   rejected: "bg-red-100 text-red-700",
 };
 const PARTICIPATION_STATUS_LABEL: Record<string, string> = {
@@ -46,11 +55,17 @@ export default function BusinessDashboard() {
   const { data: campaigns, isLoading } = trpc.campaign.myBusiness.useQuery();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [selectedProof, setSelectedProof] = useState<{ url: string; label: string } | null>(null);
+  const [chatWith, setChatWith] = useState<{ id: number; name: string } | null>(null);
 
   const { data: participants, isLoading: loadingParts } = trpc.campaign.campaignParticipants.useQuery(
     { campaignId: expandedId! },
     { enabled: expandedId !== null }
   );
+
+  const assignZip = trpc.campaign.assignZipPackets.useMutation({
+    onSuccess: (res) => toast.success(`${res.assigned}명에게 가이드 ZIP을 할당했어요! (유닛 ${res.units}개 / 참여 ${res.participants}명)`),
+    onError: err => toast.error(err.message),
+  });
 
   return (
     <ClientLayout
@@ -122,7 +137,21 @@ export default function BusinessDashboard() {
                   {/* Participants panel */}
                   {expanded && (
                     <div className="border-t border-border/60 bg-muted/20 px-5 py-4">
-                      <h4 className="mb-3 text-sm font-semibold text-foreground">리뷰어 참여 현황</h4>
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <h4 className="text-sm font-semibold text-foreground">리뷰어 참여 현황</h4>
+                        {c.hasPhotoGuideZip && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5 rounded-full bg-card"
+                            disabled={assignZip.isPending}
+                            onClick={() => assignZip.mutate({ campaignId: c.id })}
+                          >
+                            {assignZip.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderArchive className="h-3.5 w-3.5" />}
+                            가이드 ZIP 리뷰어 할당
+                          </Button>
+                        )}
+                      </div>
                       {loadingParts ? (
                         <div className="space-y-2">
                           {[0, 1].map(i => <div key={i} className="h-10 animate-pulse rounded-xl bg-muted" />)}
@@ -137,7 +166,8 @@ export default function BusinessDashboard() {
                                 <th className="pb-2 pr-4 text-left font-medium">리뷰어</th>
                                 <th className="pb-2 pr-4 text-left font-medium">연락처</th>
                                 <th className="pb-2 pr-4 text-left font-medium">상태</th>
-                                <th className="pb-2 text-left font-medium">인증샷</th>
+                                <th className="pb-2 pr-4 text-left font-medium">인증샷</th>
+                                <th className="pb-2 text-left font-medium">채팅</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-border/40">
@@ -184,6 +214,17 @@ export default function BusinessDashboard() {
                                       )}
                                     </div>
                                   </td>
+                                  <td className="py-2.5">
+                                    {p.reviewer?.id ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setChatWith({ id: p.reviewer!.id, name: p.reviewer!.fullName ?? "리뷰어" })}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-card px-2 py-1 text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
+                                      >
+                                        <MessageCircle className="h-3.5 w-3.5" /> 채팅
+                                      </button>
+                                    ) : <span className="text-xs text-muted-foreground">-</span>}
+                                  </td>
                                 </tr>
                               ))}
                             </tbody>
@@ -210,6 +251,13 @@ export default function BusinessDashboard() {
           )}
         </DialogContent>
       </Dialog>
+
+      <BusinessChatDialog
+        open={!!chatWith}
+        onOpenChange={o => !o && setChatWith(null)}
+        partnerId={chatWith?.id ?? null}
+        partnerName={chatWith?.name ?? ""}
+      />
     </ClientLayout>
   );
 }

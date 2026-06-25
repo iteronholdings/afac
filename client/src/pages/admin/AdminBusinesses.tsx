@@ -1,5 +1,6 @@
 import AdminLayout from "@/components/AdminLayout";
 import DepositHistory from "@/components/DepositHistory";
+import PasswordResetButton from "@/components/PasswordResetButton";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -86,6 +87,7 @@ export default function AdminBusinesses() {
                   <Button size="sm" variant="ghost" className="h-8 gap-1 rounded-full" onClick={() => setLogFor({ id: b.id, name: b.fullName })}>
                     <Receipt className="h-3.5 w-3.5" /> 내역
                   </Button>
+                  <PasswordResetButton userId={b.id} name={b.fullName} />
                 </div>
               </div>
             ))}

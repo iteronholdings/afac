@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import BusinessChatDialog from "@/components/BusinessChatDialog";
 import { ChatDialog } from "@/components/ChatDialog";
 import { useChatNotifications } from "@/hooks/useChatNotifications";
 import { ImageUploader } from "@/components/ImageUploader";
@@ -23,6 +24,7 @@ import {
 } from "@/lib/workflow";
 import {
   ClipboardList,
+  FolderArchive,
   ImageIcon,
   MessageCircle,
   PackageCheck,
@@ -57,6 +59,22 @@ export default function MyActivity() {
 
   const [uploadFor, setUploadFor] = useState<{ id: number; kind: ProofKind; keyword?: string } | null>(null);
   const [chatTarget, setChatTarget] = useState<{ participationId: number; title: string } | null>(null);
+  const [bizChatWith, setBizChatWith] = useState<{ id: number; name: string } | null>(null);
+
+  const downloadPacket = async (participationId: number) => {
+    try {
+      const res = await utils.participation.myPacket.fetch({ participationId });
+      if (!res.dataUrl) { toast.error("할당된 가이드가 없습니다."); return; }
+      const a = document.createElement("a");
+      a.href = res.dataUrl;
+      a.download = res.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) {
+      toast.error("다운로드에 실패했습니다.");
+    }
+  };
   const [proofUrl, setProofUrl] = useState<string | null>(null);
 
   const searchMutation = trpc.participation.submitSearchProof.useMutation({
@@ -262,18 +280,42 @@ export default function MyActivity() {
                       </p>
                     )}
 
-                    {/* 채팅 문의 버튼 */}
+                    {/* 운영팀 문의 버튼 */}
                     <Button
                       size="sm"
                       variant="outline"
                       className="relative bg-card"
                       onClick={() => setChatTarget({ participationId: p.id, title: c?.title ?? "캠페인 문의" })}
                     >
-                      <MessageCircle className="mr-1.5 h-4 w-4" /> 문의하기
+                      <MessageCircle className="mr-1.5 h-4 w-4" /> 운영팀 문의
                       {unreadChats.has(p.id) && (
                         <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-red-500" />
                       )}
                     </Button>
+
+                    {/* 업체 문의 버튼 */}
+                    {c?.createdBy && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="bg-card"
+                        onClick={() => setBizChatWith({ id: c.createdBy!, name: c?.title ? `${c.title} 업체` : "업체" })}
+                      >
+                        <MessageCircle className="mr-1.5 h-4 w-4" /> 업체 문의
+                      </Button>
+                    )}
+
+                    {/* 촬영 가이드 ZIP 다운로드 (할당된 경우) */}
+                    {p.hasPacket && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="bg-primary/5 text-primary"
+                        onClick={() => downloadPacket(p.id)}
+                      >
+                        <FolderArchive className="mr-1.5 h-4 w-4" /> 촬영 가이드 받기
+                      </Button>
+                    )}
 
                     {/* Show submitted proofs */}
                     <div className="ml-auto flex gap-2">
@@ -330,6 +372,13 @@ export default function MyActivity() {
           title={chatTarget.title}
         />
       )}
+
+      <BusinessChatDialog
+        open={!!bizChatWith}
+        onOpenChange={o => !o && setBizChatWith(null)}
+        partnerId={bizChatWith?.id ?? null}
+        partnerName={bizChatWith?.name ?? ""}
+      />
 
       {/* Proof upload dialog */}
       <Dialog open={!!uploadFor} onOpenChange={o => !o && closeUpload()}>

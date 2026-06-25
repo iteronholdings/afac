@@ -2,6 +2,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { router } from "./_core/trpc";
 import { adminRouter } from "./routers/admin";
 import { authRouter } from "./routers/auth";
+import { businessMessageRouter } from "./routers/businessMessage";
 import { campaignRouter } from "./routers/campaign";
 import { consultingRouter } from "./routers/consulting";
 import { depositRouter } from "./routers/deposit";
@@ -20,6 +21,7 @@ export const appRouter = router({
   directMessage: directMessageRouter,
   consulting: consultingRouter,
   deposit: depositRouter,
+  businessMessage: businessMessageRouter,
   admin: adminRouter,
   upload: uploadRouter,
 });

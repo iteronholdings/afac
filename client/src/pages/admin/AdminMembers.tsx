@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import AdminLayout from "@/components/AdminLayout";
+import PasswordResetButton from "@/components/PasswordResetButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -170,22 +171,25 @@ export default function AdminMembers() {
                   </TableCell>
 
                   <TableCell className="text-right">
-                    {!m.isSelf && m.role !== "admin" && !m.isOwner ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="bg-card"
-                        onClick={() =>
-                          window.dispatchEvent(
-                            new CustomEvent("open-dm", { detail: { reviewerId: m.id, reviewerName: m.fullName || m.name || m.loginId } })
-                          )
-                        }
-                      >
-                        <MessageCircle className="mr-1.5 h-3.5 w-3.5" /> 채팅
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">-</span>
-                    )}
+                    <div className="flex items-center justify-end gap-1">
+                      {!m.isSelf && m.role !== "admin" && !m.isOwner && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="bg-card"
+                          onClick={() =>
+                            window.dispatchEvent(
+                              new CustomEvent("open-dm", { detail: { reviewerId: m.id, reviewerName: m.fullName || m.name || m.loginId } })
+                            )
+                          }
+                        >
+                          <MessageCircle className="mr-1.5 h-3.5 w-3.5" /> 채팅
+                        </Button>
+                      )}
+                      {!m.isOwner && (
+                        <PasswordResetButton userId={m.id} name={m.fullName || m.name || m.loginId || "-"} />
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     {m.isOwner || !iAmOwner ? (

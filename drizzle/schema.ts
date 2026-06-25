@@ -88,8 +88,12 @@ export const campaigns = mysqlTable("campaigns", {
   photoGuideZip: longtext("photoGuideZip"),
   /** 사진 리뷰 ZIP 원본 파일명. */
   photoGuideZipName: varchar("photoGuideZipName", { length: 255 }),
-  /** pending: 업체 신청 대기, open: 모집 중, closed: 마감, rejected: 반려. */
-  status: mysqlEnum("status", ["pending", "open", "closed", "rejected"]).default("open").notNull(),
+  /**
+   * 운영 상태:
+   * pending(승인대기) · open(승인완료=모집중) · in_progress(작업진행) ·
+   * error(오류) · closed(작업완료) · rejected(반려).
+   */
+  status: mysqlEnum("status", ["pending", "open", "closed", "rejected", "in_progress", "error"]).default("open").notNull(),
   /** User.id who created/requested this campaign (admin or business). */
   createdBy: int("createdBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -127,6 +131,11 @@ export const participations = mysqlTable("participations", {
   reviewProofUrl: longtext("reviewProofUrl"),
   /** Optional memo from admin (e.g. rejection reason or payout note). */
   adminMemo: text("adminMemo"),
+
+  /** 사진 리뷰 ZIP에서 이 리뷰어에게 할당된 패킷 (base64 zip data URL). */
+  assignedPacket: longtext("assignedPacket"),
+  /** 할당된 패킷의 이름 (ZIP 내 폴더/파일명). */
+  assignedName: varchar("assignedName", { length: 255 }),
 
   appliedAt: timestamp("appliedAt").defaultNow().notNull(),
   searchedAt: timestamp("searchedAt"),
@@ -226,3 +235,25 @@ export const depositTransactions = mysqlTable("deposit_transactions", {
 
 export type DepositTransaction = typeof depositTransactions.$inferSelect;
 export type InsertDepositTransaction = typeof depositTransactions.$inferInsert;
+
+/**
+ * 업체 ↔ 리뷰어 1:1 채팅. 대화는 (businessId, reviewerId) 쌍으로 묶인다.
+ * 리뷰어가 업체의 캠페인에 참여한 관계에서 문의/소통에 사용.
+ */
+export const businessMessages = mysqlTable("business_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  /** 업체(비즈니스) user.id. */
+  businessId: int("businessId").notNull(),
+  /** 리뷰어 user.id. */
+  reviewerId: int("reviewerId").notNull(),
+  /** 보낸 사람 user.id (업체 또는 리뷰어). */
+  fromUserId: int("fromUserId").notNull(),
+  content: text("content"),
+  imageUrl: longtext("imageUrl"),
+  /** 수신자가 읽은 시각. null = 안 읽음. */
+  readAt: timestamp("readAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BusinessMessage = typeof businessMessages.$inferSelect;
+export type InsertBusinessMessage = typeof businessMessages.$inferInsert;

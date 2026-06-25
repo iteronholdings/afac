@@ -1,4 +1,5 @@
 import { TRPCError } from "@trpc/server";
+import bcrypt from "bcryptjs";
 import { z } from "zod";
 import * as db from "../db";
 import { adminProcedure, router } from "../_core/trpc";
@@ -68,6 +69,20 @@ export const adminRouter = router({
     .input(z.object({ userId: z.number().int(), memberCode: z.string().max(20) }))
     .mutation(async ({ input }) => {
       return db.setMemberCode(input.userId, input.memberCode.trim());
+    }),
+
+  /** Admin: reset any member's password (also usable on self). */
+  setMemberPassword: adminProcedure
+    .input(z.object({
+      userId: z.number().int(),
+      newPassword: z.string().min(6, "비밀번호는 6자 이상이어야 합니다.").max(72),
+    }))
+    .mutation(async ({ input }) => {
+      const target = await db.getUserById(input.userId);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "회원을 찾을 수 없습니다." });
+      const passwordHash = await bcrypt.hash(input.newPassword, 10);
+      await db.setMemberPasswordHash(input.userId, passwordHash);
+      return { success: true as const };
     }),
 
   // === 업체 관리 (deposits) ===
