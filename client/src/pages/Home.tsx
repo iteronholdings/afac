@@ -1,8 +1,10 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import CampaignCard from "@/components/CampaignCard";
+import ReviewerGuide from "@/components/ReviewerGuide";
 import SiteHeader from "@/components/SiteHeader";
 import WorkflowStepper from "@/components/WorkflowStepper";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -67,7 +69,14 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-b from-secondary/40 to-background">
       <SiteHeader />
 
-      <main className="container max-w-5xl py-10 pb-28 space-y-14">
+      <main className="container max-w-5xl py-10 pb-28">
+        <Tabs defaultValue="campaigns" className="space-y-10">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="campaigns">캠페인 참여</TabsTrigger>
+            <TabsTrigger value="guide">리뷰어 절차 안내</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="campaigns" className="space-y-14">
 
         {/* 진행 중인 캠페인 */}
         <section>
@@ -217,6 +226,12 @@ export default function Home() {
             </div>
           )}
         </section>
+          </TabsContent>
+
+          <TabsContent value="guide">
+            <ReviewerGuide />
+          </TabsContent>
+        </Tabs>
       </main>
 
       {/* Campaign apply dialog */}

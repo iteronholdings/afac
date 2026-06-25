@@ -209,6 +209,55 @@ export const campaignRouter = router({
     return withCounts;
   }),
 
+  // Business: save (create or update) a campaign-application draft.
+  // 마법사 입력값 전체를 JSON으로 보관 — 예치금 차감/정식 캠페인 생성과 무관.
+  saveDraft: businessProcedure
+    .input(z.object({
+      id: z.number().int().optional(),
+      title: z.string().trim().max(200).optional(),
+      data: z.string().max(10_000_000), // WizardData JSON (썸네일 base64 포함, ZIP 제외)
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const title = input.title || "제목 없는 캠페인";
+      if (input.id) {
+        const existing = await db.getCampaignDraftById(input.id);
+        if (!existing || existing.userId !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
+        }
+        return db.updateCampaignDraft(input.id, { title, data: input.data });
+      }
+      return db.createCampaignDraft({ userId: ctx.user.id, title, data: input.data });
+    }),
+
+  // Business: list my drafts (lightweight — without the heavy `data` payload).
+  myDrafts: businessProcedure.query(async ({ ctx }) => {
+    const rows = await db.listCampaignDraftsByOwner(ctx.user.id);
+    return rows.map(({ data, ...rest }) => rest);
+  }),
+
+  // Business: load one draft (with full data) to resume editing.
+  getDraft: businessProcedure
+    .input(z.object({ id: z.number().int() }))
+    .query(async ({ ctx, input }) => {
+      const draft = await db.getCampaignDraftById(input.id);
+      if (!draft || draft.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "임시저장을 찾을 수 없습니다." });
+      }
+      return draft;
+    }),
+
+  // Business: delete a draft (on submit or manual discard).
+  deleteDraft: businessProcedure
+    .input(z.object({ id: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      const draft = await db.getCampaignDraftById(input.id);
+      if (!draft || draft.userId !== ctx.user.id) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "임시저장을 찾을 수 없습니다." });
+      }
+      await db.deleteCampaignDraft(input.id);
+      return { id: input.id };
+    }),
+
   // Business/Admin: decompress the uploaded photo-guide ZIP and assign one
   // top-level unit (folder or file) to each reviewer in order (a방식).
   assignZipPackets: businessProcedure

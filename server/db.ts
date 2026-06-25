@@ -2,6 +2,7 @@ import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   businessMessages,
+  campaignDrafts,
   campaigns,
   consultingRequests,
   depositRequests,
@@ -9,6 +10,7 @@ import {
   directMessages,
   InsertBusinessMessage,
   InsertCampaign,
+  InsertCampaignDraft,
   InsertConsultingRequest,
   InsertDepositRequest,
   InsertDirectMessage,
@@ -63,6 +65,7 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE deposit_requests ADD COLUMN repName VARCHAR(40)`,
     sql`ALTER TABLE deposit_requests ADD COLUMN companyName VARCHAR(100)`,
     sql`ALTER TABLE deposit_requests ADD COLUMN taxEmail VARCHAR(120)`,
+    sql`ALTER TABLE users ADD COLUMN reviewerAgreedAt TIMESTAMP NULL`,
   ];
   for (const stmt of alterStatements) {
     try {
@@ -137,6 +140,21 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     await db.execute(sql`ALTER TABLE campaigns MODIFY COLUMN status ENUM('pending','open','closed','rejected','in_progress','error') NOT NULL DEFAULT 'open'`);
   } catch (e) {
     console.warn("[Migration] campaigns.status enum:", e);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS campaign_drafts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        userId INT NOT NULL,
+        title VARCHAR(200),
+        data LONGTEXT,
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (e) {
+    console.warn("[Migration] campaign_drafts table:", e);
   }
 
   try {
@@ -322,6 +340,14 @@ export async function touchLastSignedIn(openId: string) {
     .where(eq(users.openId, openId));
 }
 
+/** 리뷰어가 절차 안내에 동의한 시각을 기록. */
+export async function setReviewerAgreed(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ reviewerAgreedAt: new Date() }).where(eq(users.id, userId));
+  return getUserById(userId);
+}
+
 // === Member management (admin) ===
 
 export async function listAllUsers() {
@@ -432,6 +458,48 @@ export async function listCampaignsByOwner(userId: number) {
     .from(campaigns)
     .where(eq(campaigns.createdBy, userId))
     .orderBy(desc(campaigns.createdAt));
+}
+
+// === Campaign drafts (캠페인 신청 임시저장) ===
+
+export async function listCampaignDraftsByOwner(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(campaignDrafts)
+    .where(eq(campaignDrafts.userId, userId))
+    .orderBy(desc(campaignDrafts.updatedAt));
+}
+
+export async function getCampaignDraftById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(campaignDrafts).where(eq(campaignDrafts.id, id)).limit(1);
+  return rows.length > 0 ? rows[0] : undefined;
+}
+
+export async function createCampaignDraft(data: InsertCampaignDraft) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(campaignDrafts).values(data);
+  const insertId = (result as unknown as { insertId: number }[])[0]?.insertId
+    ?? (result as unknown as { insertId: number }).insertId;
+  return getCampaignDraftById(Number(insertId));
+}
+
+export async function updateCampaignDraft(id: number, data: Partial<InsertCampaignDraft>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(campaignDrafts).set(data).where(eq(campaignDrafts.id, id));
+  return getCampaignDraftById(id);
+}
+
+export async function deleteCampaignDraft(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(campaignDrafts).where(eq(campaignDrafts.id, id));
+  return { id };
 }
 
 export async function listParticipationsByCampaign(campaignId: number) {

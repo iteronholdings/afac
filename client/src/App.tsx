@@ -22,6 +22,7 @@ import Campaigns from "./pages/Campaigns";
 import Home from "./pages/Home";
 import Landing from "./pages/Landing";
 import MyActivity from "./pages/MyActivity";
+import ReviewerOnboarding from "./pages/ReviewerOnboarding";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import { useAuth } from "./_core/hooks/useAuth";
@@ -51,6 +52,35 @@ function ProtectedRoute({ component: Component, loginPath = "/afreviewer/login" 
   return <Component />;
 }
 
+/**
+ * 리뷰어 전용 가드: 로그인 + '절차 안내 동의' 완료까지 요구한다.
+ * 미동의 리뷰어는 /onboarding 으로 보내 활동을 막는다. (업체/관리자는 그대로 통과)
+ */
+function ReviewerRoute({ component: Component }: { component: React.ComponentType }) {
+  const { user, isAuthenticated, loading } = useAuth();
+  const [, navigate] = useLocation();
+
+  const needsOnboarding = user?.role === "user" && !user.reviewerAgreedAt;
+
+  useEffect(() => {
+    if (loading) return;
+    if (!isAuthenticated) { navigate("/afreviewer/login"); return; }
+    if (needsOnboarding) navigate("/onboarding");
+  }, [loading, isAuthenticated, needsOnboarding, navigate]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated || needsOnboarding) return null;
+
+  return <Component />;
+}
+
 function Router() {
   return (
     <Switch>
@@ -58,9 +88,10 @@ function Router() {
       <Route path="/afreviewer/login" component={Login} />
       <Route path="/afreviewer/signup" component={Signup} />
       <Route path="/" component={Landing} />
-      <Route path="/home" component={() => <ProtectedRoute component={Home} />} />
-      <Route path="/campaigns" component={() => <ProtectedRoute component={Campaigns} />} />
-      <Route path="/my" component={() => <ProtectedRoute component={MyActivity} />} />
+      <Route path="/onboarding" component={() => <ProtectedRoute component={ReviewerOnboarding} />} />
+      <Route path="/home" component={() => <ReviewerRoute component={Home} />} />
+      <Route path="/campaigns" component={() => <ReviewerRoute component={Campaigns} />} />
+      <Route path="/my" component={() => <ReviewerRoute component={MyActivity} />} />
       <Route path="/business" component={() => <ProtectedRoute component={BusinessDashboard} />} />
       <Route path="/client" component={() => <Redirect to="/client/login" />} />
       <Route path="/client/login" component={ClientLogin} />

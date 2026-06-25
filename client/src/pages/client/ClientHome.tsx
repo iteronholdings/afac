@@ -6,11 +6,14 @@ import { formatKRW } from "@/lib/workflow";
 import {
   ArrowRight,
   ClipboardList,
+  FilePen,
   PackagePlus,
   Sparkles,
+  Trash2,
   Users,
 } from "lucide-react";
 import { useMemo } from "react";
+import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 
 const CAMPAIGN_STATUS_LABEL: Record<string, string> = {
@@ -33,7 +36,17 @@ const CAMPAIGN_STATUS_BADGE: Record<string, string> = {
 export default function ClientHome() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
+  const utils = trpc.useUtils();
   const { data: campaigns = [], isLoading } = trpc.campaign.myBusiness.useQuery();
+  const { data: drafts = [] } = trpc.campaign.myDrafts.useQuery();
+
+  const deleteDraftMutation = trpc.campaign.deleteDraft.useMutation({
+    onSuccess: () => {
+      utils.campaign.myDrafts.invalidate();
+      toast.success("임시저장을 삭제했어요.");
+    },
+    onError: err => toast.error(err.message),
+  });
 
   const stats = useMemo(() => {
     const active = campaigns.filter(c => c.status === "open").length;
@@ -108,6 +121,44 @@ export default function ClientHome() {
             </div>
           ))}
         </div>
+
+        {/* 임시저장한 캠페인 */}
+        {drafts.length > 0 && (
+          <div className="rounded-3xl border border-primary/20 bg-primary/5 p-5 shadow-sm">
+            <h3 className="mb-4 flex items-center gap-2 font-bold text-foreground">
+              <FilePen className="h-4 w-4 text-primary" /> 임시저장한 캠페인
+              <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-bold text-primary">{drafts.length}</span>
+            </h3>
+            <div className="space-y-2">
+              {drafts.map(d => (
+                <div key={d.id} className="flex items-center gap-3 rounded-2xl border border-border/70 bg-card px-3 py-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-base">📝</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold text-foreground">{d.title || "제목 없는 캠페인"}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">작성 중 · 이어서 완료해 주세요</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => navigate(`/client/campaign/new?draft=${d.id}`)}
+                    className="shrink-0 gap-1 rounded-full font-bold"
+                  >
+                    이어서 작성 <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => deleteDraftMutation.mutate({ id: d.id })}
+                    disabled={deleteDraftMutation.isPending}
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    aria-label="임시저장 삭제"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Recent campaigns */}

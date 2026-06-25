@@ -5,7 +5,7 @@ import { z } from "zod";
 import * as db from "../db";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { sdk } from "../_core/sdk";
-import { publicProcedure, router } from "../_core/trpc";
+import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
 
 const loginIdSchema = z
   .string()
@@ -152,6 +152,16 @@ export const authRouter = router({
       const existing = await db.getUserByLoginId(input.loginId);
       return { available: !existing };
     }),
+
+  // 리뷰어: 절차 안내를 읽고 동의. 동의해야 캠페인 참여 등 리뷰어 활동 가능.
+  agreeReviewerTerms: protectedProcedure.mutation(async ({ ctx }) => {
+    if (ctx.user.role !== "user") {
+      // 업체·관리자는 동의 대상이 아님 — 조용히 통과 처리.
+      return { success: true as const };
+    }
+    await db.setReviewerAgreed(ctx.user.id);
+    return { success: true as const };
+  }),
 
   logout: publicProcedure.mutation(({ ctx }) => {
     const cookieOptions = getSessionCookieOptions(ctx.req);

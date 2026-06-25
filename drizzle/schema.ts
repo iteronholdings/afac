@@ -40,6 +40,9 @@ export const users = mysqlTable("users", {
   /** 예치금 잔액 (원). 업체가 캠페인 결제에 사용. */
   depositBalance: int("depositBalance").notNull().default(0),
 
+  /** 리뷰어 절차 안내에 동의한 시각. null = 아직 미동의 (리뷰어 활동 차단). */
+  reviewerAgreedAt: timestamp("reviewerAgreedAt"),
+
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
@@ -102,6 +105,26 @@ export const campaigns = mysqlTable("campaigns", {
 
 export type Campaign = typeof campaigns.$inferSelect;
 export type InsertCampaign = typeof campaigns.$inferInsert;
+
+/**
+ * 업체가 작성하던 캠페인 신청서의 임시저장본.
+ * 마법사(CampaignWizard)의 입력값 전체를 JSON 문자열(`data`)로 보관해
+ * 나중에 그대로 이어서 작성할 수 있게 한다. 정식 제출과는 무관(예치금 차감 없음).
+ */
+export const campaignDrafts = mysqlTable("campaign_drafts", {
+  id: int("id").autoincrement().primaryKey(),
+  /** 작성한 업체 user.id. */
+  userId: int("userId").notNull(),
+  /** 목록에 보여줄 제목 (상품명 등). 비어 있으면 "제목 없는 캠페인". */
+  title: varchar("title", { length: 200 }),
+  /** 마법사 입력값 전체 (WizardData JSON 직렬화). */
+  data: longtext("data"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CampaignDraft = typeof campaignDrafts.$inferSelect;
+export type InsertCampaignDraft = typeof campaignDrafts.$inferInsert;
 
 /**
  * A reviewer's participation in a campaign. Tracks the full workflow:

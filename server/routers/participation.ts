@@ -44,6 +44,9 @@ export const participationRouter = router({
       if (ctx.user.role !== "user") {
         throw new TRPCError({ code: "FORBIDDEN", message: "리뷰어 계정만 캠페인에 참여할 수 있습니다." });
       }
+      if (!ctx.user.reviewerAgreedAt) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "리뷰어 절차 안내에 먼저 동의해 주세요." });
+      }
       const campaign = await db.getCampaignById(input.campaignId);
       if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
       if (campaign.status !== "open") {

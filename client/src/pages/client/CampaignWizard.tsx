@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
-import { ArrowLeft, Check, ChevronRight, ImageIcon, Loader2, Upload, Wallet } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, ImageIcon, Loader2, Save, Upload, Wallet } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -130,6 +130,29 @@ export default function CampaignWizard() {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<WizardData>(INIT);
 
+  // 임시저장 이어쓰기: URL의 ?draft=<id> 로 진입하면 해당 임시저장본을 불러온다.
+  const initialDraftId = (() => {
+    const id = new URLSearchParams(window.location.search).get("draft");
+    return id && /^\d+$/.test(id) ? Number(id) : null;
+  })();
+  const [draftId, setDraftId] = useState<number | null>(initialDraftId);
+  const draftIdRef = useRef<number | null>(initialDraftId);
+  useEffect(() => { draftIdRef.current = draftId; }, [draftId]);
+
+  const draftQuery = trpc.campaign.getDraft.useQuery(
+    { id: initialDraftId! },
+    { enabled: initialDraftId != null },
+  );
+  useEffect(() => {
+    const raw = draftQuery.data?.data;
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as Partial<WizardData>;
+      setData(prev => ({ ...prev, ...parsed }));
+      toast.success("임시저장한 내용을 불러왔어요 🐻");
+    } catch { /* 손상된 임시저장은 무시 */ }
+  }, [draftQuery.data]);
+
   const totalReviewers = useMemo(
     () => (Number(data.photoCount) || 0) + (Number(data.textCount) || 0) + (Number(data.starCount) || 0),
     [data.photoCount, data.textCount, data.starCount]
@@ -196,10 +219,38 @@ export default function CampaignWizard() {
     return () => window.removeEventListener("paste", onPaste);
   }, [step]);
 
+  // 임시저장 (생성/수정)
+  const saveDraftMutation = trpc.campaign.saveDraft.useMutation({
+    onSuccess: draft => {
+      if (draft?.id) setDraftId(draft.id);
+      utils.campaign.myDrafts.invalidate();
+      toast.success("임시저장되었어요. 나중에 이어서 작성할 수 있어요 🐻");
+    },
+    onError: (err: unknown) =>
+      toast.error(err instanceof TRPCClientError ? err.message : "임시저장에 실패했습니다."),
+  });
+  const deleteDraftMutation = trpc.campaign.deleteDraft.useMutation();
+
+  const saveDraft = () => {
+    // 사진 리뷰 ZIP(최대 50MB)은 임시저장에서 제외 — 이어서 작성 시 다시 업로드한다.
+    const { photoZip: _zip, photoZipName: _zipName, ...light } = data;
+    saveDraftMutation.mutate({
+      id: draftId ?? undefined,
+      title: data.productFullName.trim() || undefined,
+      data: JSON.stringify(light),
+    });
+  };
+
   const requestMutation = trpc.campaign.request.useMutation({
     onSuccess: () => {
       utils.campaign.myBusiness.invalidate();
       utils.auth.me.invalidate();  // 예치금 차감 반영
+      // 결제까지 마쳤으면 임시저장본은 정리.
+      const did = draftIdRef.current;
+      if (did) {
+        deleteDraftMutation.mutate({ id: did });
+        utils.campaign.myDrafts.invalidate();
+      }
       toast.success("예치금에서 결제되었어요! 관리자 승인 후 캠페인이 시작됩니다 🐻");
       navigate("/client/campaigns");
     },
@@ -639,14 +690,26 @@ export default function CampaignWizard() {
                 <Button variant="outline" onClick={prev} className="gap-1 rounded-full bg-card"><ArrowLeft className="h-4 w-4" /> 이전</Button>
               ) : <div />}
 
-              {step < STEPS.length - 1 ? (
-                <Button onClick={next} className="gap-1 rounded-full font-bold">다음 <ChevronRight className="h-4 w-4" /></Button>
-              ) : (
-                <Button onClick={submit} disabled={requestMutation.isPending || grandTotal > balance} className="gap-1.5 rounded-full font-bold">
-                  {requestMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-                  {grandTotal > balance ? "예치금 부족" : `캠페인 결제하기 (${won(grandTotal)})`}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={saveDraft}
+                  disabled={saveDraftMutation.isPending}
+                  className="gap-1.5 rounded-full bg-card"
+                >
+                  {saveDraftMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  임시저장
                 </Button>
-              )}
+
+                {step < STEPS.length - 1 ? (
+                  <Button onClick={next} className="gap-1 rounded-full font-bold">다음 <ChevronRight className="h-4 w-4" /></Button>
+                ) : (
+                  <Button onClick={submit} disabled={requestMutation.isPending || grandTotal > balance} className="gap-1.5 rounded-full font-bold">
+                    {requestMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                    {grandTotal > balance ? "예치금 부족" : `캠페인 결제하기 (${won(grandTotal)})`}
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 
