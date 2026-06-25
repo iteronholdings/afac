@@ -224,7 +224,7 @@ export default function Landing() {
         <div className="mx-auto mt-8 max-w-md overflow-hidden rounded-3xl border border-border/70 bg-card shadow-sm">
           {[
             ["입금대행 수수료", "0%", true],
-            ["1건당 리뷰 진행 수수료", "2,000원", false],
+            ["1건당 리뷰 진행 수수료", "2,400원", false],
             ["택배 발송료", "2,300원", false],
           ].map(([label, value, free]) => (
             <div key={label as string} className="flex items-center justify-between border-b border-border/60 px-5 py-4 last:border-0">

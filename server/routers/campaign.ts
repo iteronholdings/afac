@@ -163,7 +163,7 @@ export const campaignRouter = router({
   request: businessProcedure
     .input(campaignInput)
     .mutation(async ({ ctx, input }) => {
-      const REVIEW_FEE = 2000;   // 셀러 부담 건당 리뷰 비용
+      const REVIEW_FEE = 2400;   // 셀러 부담 건당 리뷰 비용
       const SHIPPING_FEE = 2300; // 건당 택배비
       const perUnit = (input.productPrice ?? 0) + REVIEW_FEE + SHIPPING_FEE;
       const total = perUnit * input.slots;
