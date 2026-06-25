@@ -58,6 +58,11 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE users ADD COLUMN depositBalance INT NOT NULL DEFAULT 0`,
     sql`ALTER TABLE participations ADD COLUMN assignedPacket LONGTEXT`,
     sql`ALTER TABLE participations ADD COLUMN assignedName VARCHAR(255)`,
+    sql`ALTER TABLE deposit_requests ADD COLUMN taxInvoice ENUM('issue','none') NOT NULL DEFAULT 'none'`,
+    sql`ALTER TABLE deposit_requests ADD COLUMN bizNumber VARCHAR(20)`,
+    sql`ALTER TABLE deposit_requests ADD COLUMN repName VARCHAR(40)`,
+    sql`ALTER TABLE deposit_requests ADD COLUMN companyName VARCHAR(100)`,
+    sql`ALTER TABLE deposit_requests ADD COLUMN taxEmail VARCHAR(120)`,
   ];
   for (const stmt of alterStatements) {
     try {
@@ -111,8 +116,13 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
         id INT AUTO_INCREMENT PRIMARY KEY,
         userId INT NOT NULL,
         amount INT NOT NULL,
-        depositorName VARCHAR(60),
+        depositorName VARCHAR(20),
         memo VARCHAR(255),
+        taxInvoice ENUM('issue','none') NOT NULL DEFAULT 'none',
+        bizNumber VARCHAR(20),
+        repName VARCHAR(40),
+        companyName VARCHAR(100),
+        taxEmail VARCHAR(120),
         status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
         processedBy INT,
         processedAt TIMESTAMP NULL,

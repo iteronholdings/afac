@@ -9,7 +9,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { Copy, Landmark, Loader2, Wallet } from "lucide-react";
+import { Copy, FileText, Landmark, Loader2, Wallet } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -33,15 +33,27 @@ export default function ChargeRequestDialog({
   const utils = trpc.useUtils();
   const [amount, setAmount] = useState("");
   const [depositorName, setDepositorName] = useState("");
-  const [memo, setMemo] = useState("");
+  const [taxInvoice, setTaxInvoice] = useState<"issue" | "none">("none");
+  const [bizNumber, setBizNumber] = useState("");
+  const [repName, setRepName] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [taxEmail, setTaxEmail] = useState("");
+
+  const reset = () => {
+    setAmount("");
+    setDepositorName("");
+    setTaxInvoice("none");
+    setBizNumber("");
+    setRepName("");
+    setCompanyName("");
+    setTaxEmail("");
+  };
 
   const mutation = trpc.deposit.requestCharge.useMutation({
     onSuccess: () => {
       toast.success("충전요청이 접수되었어요! 입금 확인 후 예치금에 반영됩니다 🐻");
       utils.deposit.myRequests.invalidate();
-      setAmount("");
-      setDepositorName("");
-      setMemo("");
+      reset();
       onOpenChange(false);
     },
     onError: err => toast.error(err.message),
@@ -54,10 +66,24 @@ export default function ChargeRequestDialog({
       toast.error("충전 금액을 입력해 주세요.");
       return;
     }
+    if (!depositorName.trim()) {
+      toast.error("입금자명을 입력해 주세요.");
+      return;
+    }
+    if (taxInvoice === "issue") {
+      if (!bizNumber.trim() || !repName.trim() || !companyName.trim() || !taxEmail.trim()) {
+        toast.error("세금계산서 발급 정보를 모두 입력해 주세요.");
+        return;
+      }
+    }
     mutation.mutate({
       amount: amountNum,
-      depositorName: depositorName.trim() || undefined,
-      memo: memo.trim() || undefined,
+      depositorName: depositorName.trim(),
+      taxInvoice,
+      bizNumber: taxInvoice === "issue" ? bizNumber.trim() : undefined,
+      repName: taxInvoice === "issue" ? repName.trim() : undefined,
+      companyName: taxInvoice === "issue" ? companyName.trim() : undefined,
+      taxEmail: taxInvoice === "issue" ? taxEmail.trim() : undefined,
     });
   };
 
@@ -118,25 +144,66 @@ export default function ChargeRequestDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="depositorName">입금자명 <span className="font-normal text-muted-foreground">(선택)</span></Label>
+            <Label htmlFor="depositorName">입금자명 *</Label>
             <Input
               id="depositorName"
               placeholder="통장에 찍히는 입금자명"
               value={depositorName}
+              maxLength={20}
               onChange={e => setDepositorName(e.target.value)}
               className="h-11"
             />
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="chargeMemo">메모 <span className="font-normal text-muted-foreground">(선택)</span></Label>
-            <Input
-              id="chargeMemo"
-              placeholder="예: 세금계산서 요청"
-              value={memo}
-              onChange={e => setMemo(e.target.value)}
-              className="h-11"
-            />
+          {/* 세금계산서 */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              <FileText className="h-4 w-4 text-primary" /> 세금계산서
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              {([["issue", "발급"], ["none", "미발급"]] as const).map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setTaxInvoice(v)}
+                  className={`rounded-2xl border-2 py-2.5 text-sm font-bold transition-all ${
+                    taxInvoice === v
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-card text-muted-foreground hover:border-primary/40"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {taxInvoice === "issue" && (
+              <div className="space-y-2 rounded-2xl border border-border/70 bg-secondary/30 p-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="bizNumber" className="text-xs text-muted-foreground">사업자 번호 *</Label>
+                  <Input id="bizNumber" placeholder="000-00-00000" value={bizNumber} maxLength={20}
+                    onChange={e => setBizNumber(e.target.value)} className="h-10 bg-card" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="repName" className="text-xs text-muted-foreground">대표자명 *</Label>
+                    <Input id="repName" placeholder="홍길동" value={repName} maxLength={40}
+                      onChange={e => setRepName(e.target.value)} className="h-10 bg-card" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="companyName" className="text-xs text-muted-foreground">상호 *</Label>
+                    <Input id="companyName" placeholder="(주)아르벤" value={companyName} maxLength={100}
+                      onChange={e => setCompanyName(e.target.value)} className="h-10 bg-card" />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="taxEmail" className="text-xs text-muted-foreground">이메일 *</Label>
+                  <Input id="taxEmail" type="email" inputMode="email" placeholder="tax@company.com" value={taxEmail} maxLength={120}
+                    onChange={e => setTaxEmail(e.target.value)} className="h-10 bg-card" />
+                </div>
+                <p className="text-[11px] text-muted-foreground">입력하신 정보로 세금계산서가 발행됩니다.</p>
+              </div>
+            )}
           </div>
         </div>
 

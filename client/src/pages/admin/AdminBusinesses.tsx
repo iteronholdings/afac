@@ -72,38 +72,51 @@ export default function AdminBusinesses() {
           </h3>
           <div className="space-y-2">
             {pendingReqs.map(r => (
-              <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200/70 bg-card px-4 py-3">
-                <div className="min-w-0">
-                  <p className="font-semibold text-foreground">
-                    {r.business?.fullName ?? "-"}{" "}
-                    <span className="text-xs font-normal text-muted-foreground">({r.business?.loginId ?? "-"})</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {new Date(r.createdAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" })}
-                    {r.depositorName ? ` · 입금자 ${r.depositorName}` : ""}
-                    {r.memo ? ` · ${r.memo}` : ""}
-                  </p>
+              <div key={r.id} className="rounded-xl border border-amber-200/70 bg-card px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-foreground">
+                      {r.business?.fullName ?? "-"}{" "}
+                      <span className="text-xs font-normal text-muted-foreground">({r.business?.loginId ?? "-"})</span>
+                    </p>
+                    <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
+                      <span>{new Date(r.createdAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" })}</span>
+                      {r.depositorName && <span>· 입금자 {r.depositorName}</span>}
+                      <span className={`rounded-full px-1.5 py-px text-[10px] font-bold ${r.taxInvoice === "issue" ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground"}`}>
+                        세금계산서 {r.taxInvoice === "issue" ? "발급" : "미발급"}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-extrabold text-primary">{r.amount.toLocaleString()}원</span>
+                    <Button
+                      size="sm"
+                      className="h-8 gap-1 rounded-full bg-emerald-600 hover:bg-emerald-700"
+                      disabled={processReq.isPending}
+                      onClick={() => processReq.mutate({ id: r.id, action: "approve" })}
+                    >
+                      <Plus className="h-3.5 w-3.5" /> 승인
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 gap-1 rounded-full bg-card"
+                      disabled={processReq.isPending}
+                      onClick={() => processReq.mutate({ id: r.id, action: "reject" })}
+                    >
+                      <Minus className="h-3.5 w-3.5" /> 거절
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-lg font-extrabold text-primary">{r.amount.toLocaleString()}원</span>
-                  <Button
-                    size="sm"
-                    className="h-8 gap-1 rounded-full bg-emerald-600 hover:bg-emerald-700"
-                    disabled={processReq.isPending}
-                    onClick={() => processReq.mutate({ id: r.id, action: "approve" })}
-                  >
-                    <Plus className="h-3.5 w-3.5" /> 승인
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 gap-1 rounded-full bg-card"
-                    disabled={processReq.isPending}
-                    onClick={() => processReq.mutate({ id: r.id, action: "reject" })}
-                  >
-                    <Minus className="h-3.5 w-3.5" /> 거절
-                  </Button>
-                </div>
+
+                {r.taxInvoice === "issue" && (
+                  <div className="mt-2 grid gap-x-4 gap-y-1 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs sm:grid-cols-2">
+                    <div><span className="text-muted-foreground">사업자번호</span> <span className="font-semibold text-foreground">{r.bizNumber ?? "-"}</span></div>
+                    <div><span className="text-muted-foreground">대표자명</span> <span className="font-semibold text-foreground">{r.repName ?? "-"}</span></div>
+                    <div><span className="text-muted-foreground">상호</span> <span className="font-semibold text-foreground">{r.companyName ?? "-"}</span></div>
+                    <div className="min-w-0 truncate"><span className="text-muted-foreground">이메일</span> <span className="font-semibold text-foreground">{r.taxEmail ?? "-"}</span></div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

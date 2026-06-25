@@ -17,15 +17,41 @@ export const depositRouter = router({
   requestCharge: businessProcedure
     .input(z.object({
       amount: z.number().int().positive("충전 금액을 입력해 주세요.").max(100_000_000),
-      depositorName: z.string().trim().max(60).optional(),
-      memo: z.string().trim().max(255).optional(),
+      depositorName: z.string().trim().min(1, "입금자명을 입력해 주세요.").max(20, "입금자명은 최대 20자입니다."),
+      taxInvoice: z.enum(["issue", "none"]).default("none"),
+      bizNumber: z.string().trim().max(20).optional(),
+      repName: z.string().trim().max(40).optional(),
+      companyName: z.string().trim().max(100).optional(),
+      taxEmail: z.string().trim().max(120).optional(),
+    }).superRefine((val, ctx) => {
+      if (val.taxInvoice === "issue") {
+        const fields: [keyof typeof val, string][] = [
+          ["bizNumber", "사업자 번호"],
+          ["repName", "대표자명"],
+          ["companyName", "상호"],
+          ["taxEmail", "이메일"],
+        ];
+        for (const [key, label] of fields) {
+          if (!String(val[key] ?? "").trim()) {
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: [key], message: `${label}을(를) 입력해 주세요.` });
+          }
+        }
+        if (val.taxEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val.taxEmail)) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["taxEmail"], message: "올바른 이메일을 입력해 주세요." });
+        }
+      }
     }))
     .mutation(async ({ ctx, input }) => {
+      const issuing = input.taxInvoice === "issue";
       const created = await db.createDepositRequest({
         userId: ctx.user.id,
         amount: input.amount,
-        depositorName: input.depositorName || null,
-        memo: input.memo || null,
+        depositorName: input.depositorName,
+        taxInvoice: input.taxInvoice,
+        bizNumber: issuing ? input.bizNumber || null : null,
+        repName: issuing ? input.repName || null : null,
+        companyName: issuing ? input.companyName || null : null,
+        taxEmail: issuing ? input.taxEmail || null : null,
         status: "pending",
       });
       return created;

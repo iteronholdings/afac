@@ -247,10 +247,17 @@ export const depositRequests = mysqlTable("deposit_requests", {
   userId: int("userId").notNull(),
   /** 충전 요청 금액 (원). */
   amount: int("amount").notNull(),
-  /** 입금자명 (통장 표기명). */
-  depositorName: varchar("depositorName", { length: 60 }),
-  /** 추가 메모 (선택). */
+  /** 입금자명 (통장 표기명). 필수, 최대 20자. */
+  depositorName: varchar("depositorName", { length: 20 }),
+  /** 추가 메모 (선택, 레거시). */
   memo: varchar("memo", { length: 255 }),
+  /** 세금계산서 발급 여부. issue: 발급, none: 미발급. */
+  taxInvoice: mysqlEnum("taxInvoice", ["issue", "none"]).default("none").notNull(),
+  /** 세금계산서 발급 정보 (발급 선택 시). */
+  bizNumber: varchar("bizNumber", { length: 20 }),
+  repName: varchar("repName", { length: 40 }),
+  companyName: varchar("companyName", { length: 100 }),
+  taxEmail: varchar("taxEmail", { length: 120 }),
   /** pending: 승인 대기, approved: 승인 완료(반영됨), rejected: 거절. */
   status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
   /** 처리한 관리자 user.id. */
