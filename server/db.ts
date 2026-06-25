@@ -4,11 +4,13 @@ import {
   businessMessages,
   campaigns,
   consultingRequests,
+  depositRequests,
   depositTransactions,
   directMessages,
   InsertBusinessMessage,
   InsertCampaign,
   InsertConsultingRequest,
+  InsertDepositRequest,
   InsertDirectMessage,
   InsertMessage,
   InsertParticipation,
@@ -101,6 +103,24 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     `);
   } catch (e) {
     console.warn("[Migration] deposit_transactions table:", e);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS deposit_requests (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        userId INT NOT NULL,
+        amount INT NOT NULL,
+        depositorName VARCHAR(60),
+        memo VARCHAR(255),
+        status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+        processedBy INT,
+        processedAt TIMESTAMP NULL,
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (e) {
+    console.warn("[Migration] deposit_requests table:", e);
   }
 
   try {
@@ -729,6 +749,62 @@ export async function listDepositTransactions(userId: number) {
     .from(depositTransactions)
     .where(eq(depositTransactions.userId, userId))
     .orderBy(desc(depositTransactions.createdAt));
+}
+
+// === Deposit charge requests (예치금 충전요청) ===
+
+export async function createDepositRequest(data: InsertDepositRequest) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(depositRequests).values(data);
+  const insertId = (result as unknown as { insertId: number }[])[0]?.insertId
+    ?? (result as unknown as { insertId: number }).insertId;
+  const rows = await db.select().from(depositRequests).where(eq(depositRequests.id, Number(insertId))).limit(1);
+  return rows[0];
+}
+
+export async function listDepositRequestsByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(depositRequests)
+    .where(eq(depositRequests.userId, userId))
+    .orderBy(desc(depositRequests.createdAt));
+}
+
+/** 모든 충전요청 (관리자용). pending 우선, 그 다음 최신순. */
+export async function listAllDepositRequests() {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.select().from(depositRequests).orderBy(desc(depositRequests.createdAt));
+  return rows.sort((a, b) => {
+    if (a.status === "pending" && b.status !== "pending") return -1;
+    if (a.status !== "pending" && b.status === "pending") return 1;
+    return 0;
+  });
+}
+
+export async function getDepositRequestById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(depositRequests).where(eq(depositRequests.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function setDepositRequestStatus(
+  id: number,
+  status: "approved" | "rejected",
+  processedBy: number,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(depositRequests)
+    .set({ status, processedBy, processedAt: new Date() })
+    .where(eq(depositRequests.id, id));
+  const rows = await db.select().from(depositRequests).where(eq(depositRequests.id, id)).limit(1);
+  return rows[0];
 }
 
 export async function countUnreadMessages(participationId: number, viewerId: number) {

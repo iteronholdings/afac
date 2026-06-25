@@ -128,6 +128,60 @@ export const adminRouter = router({
     .input(z.object({ userId: z.number().int() }))
     .query(async ({ input }) => db.listDepositTransactions(input.userId)),
 
+  // === 예치금 충전요청 처리 ===
+
+  /** 업체들이 올린 충전요청 목록(업체 정보 포함). pending 우선. */
+  listDepositRequests: adminProcedure.query(async () => {
+    const reqs = await db.listAllDepositRequests();
+    return Promise.all(
+      reqs.map(async r => {
+        const u = await db.getUserById(r.userId);
+        return {
+          ...r,
+          business: u
+            ? {
+                id: u.id,
+                fullName: u.fullName ?? u.name ?? "-",
+                loginId: u.loginId ?? "-",
+                memberCode: u.memberCode ?? null,
+              }
+            : null,
+        };
+      })
+    );
+  }),
+
+  /** 충전요청 승인/거절. 승인 시 해당 업체 예치금에 반영된다. */
+  processDepositRequest: adminProcedure
+    .input(z.object({
+      id: z.number().int(),
+      action: z.enum(["approve", "reject"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const reqRow = await db.getDepositRequestById(input.id);
+      if (!reqRow) throw new TRPCError({ code: "NOT_FOUND", message: "충전요청을 찾을 수 없습니다." });
+      if (reqRow.status !== "pending") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "이미 처리된 요청입니다." });
+      }
+
+      if (input.action === "approve") {
+        await db.adjustDeposit({
+          userId: reqRow.userId,
+          amount: reqRow.amount,
+          type: "charge",
+          memo: `충전요청 승인${reqRow.depositorName ? ` (${reqRow.depositorName})` : ""}`,
+          createdBy: ctx.user.id,
+        });
+      }
+
+      const updated = await db.setDepositRequestStatus(
+        input.id,
+        input.action === "approve" ? "approved" : "rejected",
+        ctx.user.id,
+      );
+      return updated;
+    }),
+
   /** 정산 대기 목록: approved 상태의 참여자 + 리뷰어 계좌 정보 */
   settlementList: adminProcedure.query(async () => {
     const parts = await db.listParticipations({ status: "approved" });

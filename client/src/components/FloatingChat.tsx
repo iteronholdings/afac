@@ -58,7 +58,7 @@ export default function FloatingChat() {
   const isAdmin = user.role === "admin";
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-3 sm:bottom-6 sm:right-6">
       {open && (
         <ChatPanel
           isAdmin={isAdmin}
@@ -151,7 +151,7 @@ function ConversationList({
   });
 
   return (
-    <div className="flex h-[480px] w-80 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-2xl">
+    <div className="flex h-[min(480px,72vh)] w-[min(20rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-2xl">
       <div className="flex items-center justify-between border-b border-border/60 px-4 py-3.5">
         <h3 className="font-bold text-foreground">문의 채팅</h3>
         <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
@@ -280,7 +280,7 @@ function ChatWindow({
   const reviewerName = msgs.find(m => m.senderRole !== "admin")?.senderName ?? initialReviewerName ?? "리뷰어";
 
   return (
-    <div className="flex h-[480px] w-80 flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-2xl">
+    <div className="flex h-[min(480px,72vh)] w-[min(20rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-2xl">
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border/60 px-3 py-3.5">
         {onBack && (

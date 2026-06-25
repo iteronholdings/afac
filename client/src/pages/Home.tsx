@@ -67,7 +67,7 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-b from-secondary/40 to-background">
       <SiteHeader />
 
-      <main className="container max-w-5xl py-10 space-y-14">
+      <main className="container max-w-5xl py-10 pb-28 space-y-14">
 
         {/* 진행 중인 캠페인 */}
         <section>

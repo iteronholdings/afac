@@ -195,7 +195,7 @@ export default function AdminLayout({
           </div>
         </header>
 
-        <main className="flex-1 p-6">{children}</main>
+        <main className="flex-1 p-4 pb-24 sm:p-6 sm:pb-24">{children}</main>
       </div>
     </div>
   );

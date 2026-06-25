@@ -237,6 +237,32 @@ export type DepositTransaction = typeof depositTransactions.$inferSelect;
 export type InsertDepositTransaction = typeof depositTransactions.$inferInsert;
 
 /**
+ * 업체가 올린 예치금 충전요청. 업체가 계좌로 입금한 뒤 신청하면,
+ * 관리자가 입금을 확인하고 승인하면 예치금(depositBalance)에 반영된다.
+ * (무통장입금 자동반영은 추후 — 지금은 관리자 수동 승인.)
+ */
+export const depositRequests = mysqlTable("deposit_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  /** 요청한 업체 user.id. */
+  userId: int("userId").notNull(),
+  /** 충전 요청 금액 (원). */
+  amount: int("amount").notNull(),
+  /** 입금자명 (통장 표기명). */
+  depositorName: varchar("depositorName", { length: 60 }),
+  /** 추가 메모 (선택). */
+  memo: varchar("memo", { length: 255 }),
+  /** pending: 승인 대기, approved: 승인 완료(반영됨), rejected: 거절. */
+  status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
+  /** 처리한 관리자 user.id. */
+  processedBy: int("processedBy"),
+  processedAt: timestamp("processedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type DepositRequest = typeof depositRequests.$inferSelect;
+export type InsertDepositRequest = typeof depositRequests.$inferInsert;
+
+/**
  * 업체 ↔ 리뷰어 1:1 채팅. 대화는 (businessId, reviewerId) 쌍으로 묶인다.
  * 리뷰어가 업체의 캠페인에 참여한 관계에서 문의/소통에 사용.
  */

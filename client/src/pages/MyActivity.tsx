@@ -127,7 +127,7 @@ export default function MyActivity() {
     <div className="min-h-screen bg-gradient-to-b from-secondary/40 to-background">
       <SiteHeader />
 
-      <main className="container max-w-4xl py-10">
+      <main className="container max-w-4xl py-10 pb-28">
         <div className="mb-8 flex flex-col gap-2">
           <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
             <ClipboardList className="h-3.5 w-3.5" /> 내 활동

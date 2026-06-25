@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { ARBEN_LOGO_URL } from "@/components/BrandLogo";
+import ChargeRequestDialog from "@/components/ChargeRequestDialog";
 import {
   BarChart3,
   ChevronDown,
@@ -164,6 +165,7 @@ export default function ClientLayout({
   const { user, loading, isAuthenticated, logout } = useAuth();
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [chargeOpen, setChargeOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -221,7 +223,7 @@ export default function ClientLayout({
           </div>
         </Link>
         <button
-          onClick={() => toast.info("예치금 충전은 운영팀에 입금 요청 후 처리됩니다. 상담으로 문의해 주세요 💬")}
+          onClick={() => setChargeOpen(true)}
           className="w-full rounded-2xl bg-secondary px-3 py-2.5 text-sm font-bold text-secondary-foreground transition-colors hover:bg-accent"
         >
           예치금 충전요청
@@ -280,8 +282,10 @@ export default function ClientLayout({
           <Store className="hidden h-5 w-5 text-muted-foreground/40 sm:block" />
         </header>
 
-        <main className="flex-1 p-4 sm:p-6">{children}</main>
+        <main className="flex-1 p-4 pb-24 sm:p-6 sm:pb-24">{children}</main>
       </div>
+
+      <ChargeRequestDialog open={chargeOpen} onOpenChange={setChargeOpen} />
     </div>
   );
 }

@@ -307,7 +307,7 @@ export default function CampaignWizard() {
         </div>
 
         <div className="flex gap-6">
-          <div className="flex-1 rounded-3xl border border-border/70 bg-card p-8 shadow-sm">
+          <div className="flex-1 rounded-3xl border border-border/70 bg-card p-5 shadow-sm sm:p-8">
             <div key={step} className="animate-in fade-in-50 slide-in-from-right-3 duration-300 ease-out">
 
               {/* STEP 0 — 상품 정보 */}
@@ -439,14 +439,14 @@ export default function CampaignWizard() {
                     <p className="mt-1 text-xs text-muted-foreground">
                       리뷰어가 지정 컷을 촬영한 뒤, 한 명에게 할당된 사진을 <b className="text-foreground">ZIP 1개</b>로 압축해 업로드합니다.
                     </p>
-                    <div className="mt-3 flex items-center gap-3">
-                      <div className="grid grid-cols-2 gap-1">
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <div className="grid shrink-0 grid-cols-2 gap-1">
                         {["📷", "📷", "📷", "📷"].map((e, i) => (
                           <span key={i} className="flex h-9 w-9 items-center justify-center rounded-lg bg-card text-base shadow-sm">{e}</span>
                         ))}
                       </div>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                      <div className="flex h-16 w-16 flex-col items-center justify-center rounded-xl border-2 border-dashed border-primary/40 bg-card">
+                      <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+                      <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-xl border-2 border-dashed border-primary/40 bg-card">
                         <span className="text-xl">🗜️</span>
                         <span className="text-[10px] font-bold text-primary">review.zip</span>
                       </div>

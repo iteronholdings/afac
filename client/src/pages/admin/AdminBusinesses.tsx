@@ -30,11 +30,23 @@ export default function AdminBusinesses() {
     { enabled: !!logFor }
   );
 
+  const { data: chargeReqs = [] } = trpc.admin.listDepositRequests.useQuery();
+  const pendingReqs = chargeReqs.filter(r => r.status === "pending");
+
   const adjust = trpc.admin.adjustDeposit.useMutation({
     onSuccess: (res) => {
       utils.admin.listBusinesses.invalidate();
       toast.success(`예치금이 ${res.balance.toLocaleString()}원이 되었습니다.`);
       close();
+    },
+    onError: (err) => toast.error(err.message),
+  });
+
+  const processReq = trpc.admin.processDepositRequest.useMutation({
+    onSuccess: (_res, vars) => {
+      utils.admin.listDepositRequests.invalidate();
+      utils.admin.listBusinesses.invalidate();
+      toast.success(vars.action === "approve" ? "충전요청을 승인하고 예치금에 반영했습니다." : "충전요청을 거절했습니다.");
     },
     onError: (err) => toast.error(err.message),
   });
@@ -51,6 +63,53 @@ export default function AdminBusinesses() {
 
   return (
     <AdminLayout title="업체 관리" description="업체 계정과 예치금을 관리합니다.">
+      {/* 예치금 충전요청 */}
+      {pendingReqs.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-amber-300/60 bg-amber-50 p-4 shadow-sm">
+          <h3 className="mb-3 flex items-center gap-2 font-bold text-amber-900">
+            <Wallet className="h-4 w-4" /> 예치금 충전요청
+            <span className="rounded-full bg-amber-500 px-2 py-0.5 text-xs font-bold text-white">{pendingReqs.length}</span>
+          </h3>
+          <div className="space-y-2">
+            {pendingReqs.map(r => (
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200/70 bg-card px-4 py-3">
+                <div className="min-w-0">
+                  <p className="font-semibold text-foreground">
+                    {r.business?.fullName ?? "-"}{" "}
+                    <span className="text-xs font-normal text-muted-foreground">({r.business?.loginId ?? "-"})</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(r.createdAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" })}
+                    {r.depositorName ? ` · 입금자 ${r.depositorName}` : ""}
+                    {r.memo ? ` · ${r.memo}` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-lg font-extrabold text-primary">{r.amount.toLocaleString()}원</span>
+                  <Button
+                    size="sm"
+                    className="h-8 gap-1 rounded-full bg-emerald-600 hover:bg-emerald-700"
+                    disabled={processReq.isPending}
+                    onClick={() => processReq.mutate({ id: r.id, action: "approve" })}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> 승인
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1 rounded-full bg-card"
+                    disabled={processReq.isPending}
+                    onClick={() => processReq.mutate({ id: r.id, action: "reject" })}
+                  >
+                    <Minus className="h-3.5 w-3.5" /> 거절
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-16 animate-pulse rounded-2xl bg-muted" />)}
@@ -62,6 +121,8 @@ export default function AdminBusinesses() {
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
+          <div className="overflow-x-auto">
+          <div className="min-w-[760px]">
           <div className="grid grid-cols-[1.5fr_1fr_1.2fr_1.3fr_auto] items-center gap-3 border-b border-border/60 bg-muted/40 px-4 py-3 text-xs font-semibold text-muted-foreground">
             <div>업체명</div><div>코드</div><div>연락처</div><div className="text-right">예치금 잔액</div><div className="text-right">예치금 조정</div>
           </div>
@@ -91,6 +152,8 @@ export default function AdminBusinesses() {
                 </div>
               </div>
             ))}
+          </div>
+          </div>
           </div>
         </div>
       )}
