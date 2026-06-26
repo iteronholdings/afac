@@ -59,6 +59,12 @@ export default function MyActivity() {
   const utils = trpc.useUtils();
   const { data: parts, isLoading, isError, refetch } = trpc.participation.mine.useQuery(undefined, {
     enabled: isAuthenticated,
+    refetchOnWindowFocus: true,
+    // 사진 패킷이 백그라운드 배정되는 동안만 8초 폴링 → 준비되면 버튼이 자동으로 뜸.
+    refetchInterval: query => {
+      const d = query.state.data as { reviewType?: string | null; hasPacket?: boolean }[] | undefined;
+      return d?.some(p => p.reviewType === "photo" && !p.hasPacket) ? 8000 : false;
+    },
   });
 
   const { user } = useAuth();

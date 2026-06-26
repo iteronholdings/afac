@@ -6,16 +6,25 @@ import { assignPacketsForCampaign } from "./campaign";
 import { generateReviewDraft } from "../reviewDraft";
 
 /**
- * 사진 리뷰어가 가입하면 업로드된 가이드 ZIP에서 본인 몫 패킷을 자동 배정한다.
- * best-effort: ZIP 미업로드/오류 등은 가입 자체를 막지 않는다.
+ * 사진 패킷 배정(대용량 ZIP 분해·R2 업로드, 수십초~수분 소요)을 **백그라운드**로 실행한다.
+ * 가입 요청을 블로킹하지 않아 가입은 즉시 응답(타임아웃 방지). 캠페인별로 직렬화해
+ * 동시 가입 시 중복 처리를 막고, 새 가입분은 직전 실행 뒤 한 번 더 돌려 누락 없이 배정한다.
+ * (Railway는 상주 Node 프로세스라 응답 후에도 백그라운드 프라미스가 계속 실행됨)
  */
-async function tryAutoAssignPacket(campaignId: number) {
-  try {
-    const campaign = await db.getCampaignById(campaignId);
-    if (campaign?.photoGuideZip) await assignPacketsForCampaign(campaign);
-  } catch (e) {
-    console.error("[auto-assign packet] skipped:", e);
-  }
+const assignChains = new Map<number, Promise<void>>();
+function scheduleAssignPacket(campaignId: number) {
+  const prev = assignChains.get(campaignId) ?? Promise.resolve();
+  const next = prev
+    .catch(() => {})
+    .then(async () => {
+      const campaign = await db.getCampaignById(campaignId);
+      if (campaign?.photoGuideZip) await assignPacketsForCampaign(campaign);
+    })
+    .catch(e => console.error("[bg packet assign] failed for campaign", campaignId, e));
+  assignChains.set(campaignId, next);
+  void next.finally(() => {
+    if (assignChains.get(campaignId) === next) assignChains.delete(campaignId);
+  });
 }
 
 /**
@@ -161,7 +170,7 @@ export const participationRouter = router({
           status: "applied",
           assignedDate,
         });
-        await tryAutoAssignPacket(input.campaignId); // 구 캠페인(유형 무관)도 패킷 자동배정
+        scheduleAssignPacket(input.campaignId); // 패킷은 백그라운드 배정(가입 즉시 응답)
         if (created) await tryAssignReviewDraft(created.id, null, input.campaignId); // 원고 자동생성
         return created;
       }
@@ -190,7 +199,7 @@ export const participationRouter = router({
         reviewType: assigned,
         assignedDate,
       });
-      if (assigned === "photo") await tryAutoAssignPacket(input.campaignId); // 사진 리뷰어 패킷 자동배정
+      if (assigned === "photo") scheduleAssignPacket(input.campaignId); // 패킷은 백그라운드 배정(가입 즉시 응답)
       if (created) await tryAssignReviewDraft(created.id, assigned, input.campaignId); // 원고 자동생성
       return created;
     }),
