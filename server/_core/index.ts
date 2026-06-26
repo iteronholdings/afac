@@ -9,6 +9,8 @@ import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { verifyWebhook } from "../portone";
+import { creditVbankIfPaid } from "../depositCredit";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -34,10 +36,36 @@ async function startServer() {
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads.
   // A 50MB ZIP becomes ~67MB once base64-encoded in the JSON body, so allow 100MB.
-  app.use(express.json({ limit: "100mb" }));
+  app.use(express.json({
+    limit: "100mb",
+    // keep raw body so we can verify PortOne webhook signatures
+    verify: (req, _res, buf) => { (req as unknown as { rawBody?: string }).rawBody = buf.toString("utf8"); },
+  }));
   app.use(express.urlencoded({ limit: "100mb", extended: true }));
   registerStorageProxy(app);
   registerOAuthRoutes(app);
+
+  // PortOne(포트원) 결제 웹훅 — 가상계좌 입금 시 예치금 자동반영
+  app.post("/api/portone/webhook", async (req, res) => {
+    try {
+      const raw = (req as unknown as { rawBody?: string }).rawBody ?? JSON.stringify(req.body);
+      const ok = verifyWebhook(raw, {
+        "webhook-id": req.header("webhook-id"),
+        "webhook-timestamp": req.header("webhook-timestamp"),
+        "webhook-signature": req.header("webhook-signature"),
+      });
+      if (!ok) return res.status(400).send("invalid signature");
+      const paymentId: string | undefined = req.body?.data?.paymentId ?? req.body?.paymentId;
+      if (paymentId) {
+        const result = await creditVbankIfPaid(paymentId);
+        console.log(`[PortOne webhook] ${paymentId} →`, result);
+      }
+      res.status(200).send("ok");
+    } catch (e) {
+      console.error("[PortOne webhook] error:", e);
+      res.status(200).send("ok");
+    }
+  });
   // tRPC API
   app.use(
     "/api/trpc",

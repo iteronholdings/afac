@@ -60,12 +60,20 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE users ADD COLUMN depositBalance INT NOT NULL DEFAULT 0`,
     sql`ALTER TABLE participations ADD COLUMN assignedPacket LONGTEXT`,
     sql`ALTER TABLE participations ADD COLUMN assignedName VARCHAR(255)`,
+    sql`ALTER TABLE participations ADD COLUMN reviewType ENUM('photo','text','star')`,
     sql`ALTER TABLE deposit_requests ADD COLUMN taxInvoice ENUM('issue','none') NOT NULL DEFAULT 'none'`,
     sql`ALTER TABLE deposit_requests ADD COLUMN bizNumber VARCHAR(20)`,
     sql`ALTER TABLE deposit_requests ADD COLUMN repName VARCHAR(40)`,
     sql`ALTER TABLE deposit_requests ADD COLUMN companyName VARCHAR(100)`,
     sql`ALTER TABLE deposit_requests ADD COLUMN taxEmail VARCHAR(120)`,
     sql`ALTER TABLE users ADD COLUMN reviewerAgreedAt TIMESTAMP NULL`,
+    sql`ALTER TABLE deposit_requests ADD COLUMN method ENUM('manual','vbank') NOT NULL DEFAULT 'manual'`,
+    sql`ALTER TABLE deposit_requests ADD COLUMN paymentId VARCHAR(80)`,
+    sql`ALTER TABLE deposit_requests ADD COLUMN vbankBank VARCHAR(40)`,
+    sql`ALTER TABLE deposit_requests ADD COLUMN vbankNumber VARCHAR(40)`,
+    sql`ALTER TABLE deposit_requests ADD COLUMN vbankHolder VARCHAR(40)`,
+    sql`ALTER TABLE deposit_requests ADD COLUMN vbankDue VARCHAR(40)`,
+    sql`ALTER TABLE deposit_requests ADD COLUMN paidAt TIMESTAMP NULL`,
   ];
   for (const stmt of alterStatements) {
     try {
@@ -883,6 +891,33 @@ export async function setDepositRequestStatus(
     .where(eq(depositRequests.id, id));
   const rows = await db.select().from(depositRequests).where(eq(depositRequests.id, id)).limit(1);
   return rows[0];
+}
+
+export async function getDepositRequestByPaymentId(paymentId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select().from(depositRequests).where(eq(depositRequests.paymentId, paymentId)).limit(1);
+  return rows[0] ?? null;
+}
+
+/** 발급된 가상계좌 정보를 저장. */
+export async function setDepositRequestVbank(
+  id: number,
+  vbank: { vbankBank?: string | null; vbankNumber?: string | null; vbankHolder?: string | null; vbankDue?: string | null },
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(depositRequests).set(vbank).where(eq(depositRequests.id, id));
+}
+
+/** 입금 확인된 vbank 충전건을 반영 완료로 표시. */
+export async function markDepositRequestPaid(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(depositRequests)
+    .set({ status: "approved", paidAt: new Date() })
+    .where(eq(depositRequests.id, id));
 }
 
 export async function countUnreadMessages(participationId: number, viewerId: number) {

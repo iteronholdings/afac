@@ -40,6 +40,11 @@ const CAMPAIGN_STATUS_BADGE: Record<string, string> = {
   closed: "bg-emerald-100 text-emerald-700",
   rejected: "bg-red-100 text-red-700",
 };
+const REVIEW_TYPE_LABEL: Record<string, string> = {
+  photo: "📷 사진",
+  text: "📝 글자",
+  star: "⭐ 별점",
+};
 const PARTICIPATION_STATUS_LABEL: Record<string, string> = {
   applied: "신청",
   searched: "검색완료",
@@ -173,7 +178,16 @@ export default function BusinessDashboard() {
                             <tbody className="divide-y divide-border/40">
                               {participants.map(p => (
                                 <tr key={p.id} className="align-middle">
-                                  <td className="py-2.5 pr-4 font-medium">{p.reviewer?.fullName ?? "알 수 없음"}</td>
+                                  <td className="py-2.5 pr-4 font-medium">
+                                    <div className="flex items-center gap-1.5">
+                                      <span>{p.reviewer?.fullName ?? "알 수 없음"}</span>
+                                      {p.reviewType && (
+                                        <span className="shrink-0 rounded-full bg-secondary px-1.5 py-px text-[10px] font-bold text-secondary-foreground">
+                                          {REVIEW_TYPE_LABEL[p.reviewType]}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
                                   <td className="py-2.5 pr-4 text-muted-foreground">{p.reviewer?.phone ?? "-"}</td>
                                   <td className="py-2.5 pr-4">
                                     <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold">

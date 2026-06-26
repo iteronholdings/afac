@@ -296,9 +296,10 @@ export const campaignRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "ZIP 안에 파일이 없습니다." });
       }
 
-      // Active participants, first-come order.
+      // 사진 패킷은 'photo'로 배정된 리뷰어에게만 (선착순).
+      // 단, 유형 구분이 없는 구 캠페인(reviewType=null)은 기존대로 전체 배정.
       const parts = (await db.listParticipationsByCampaign(input.campaignId))
-        .filter(p => p.status !== "rejected")
+        .filter(p => p.status !== "rejected" && (p.reviewType === "photo" || p.reviewType == null))
         .sort((a, b) => new Date(a.appliedAt).getTime() - new Date(b.appliedAt).getTime());
 
       let assigned = 0;

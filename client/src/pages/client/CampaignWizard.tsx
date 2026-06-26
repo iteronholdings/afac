@@ -83,7 +83,7 @@ const GUIDES: { title: string; items: { label: string; desc: string; highlight?:
     title: "캠페인 설정 가이드",
     items: [
       { label: "리뷰 유형 분배", desc: "사진/글자/별점 리뷰 인원을 나눠 모집합니다.", highlight: true },
-      { label: "사진 리뷰", desc: "리뷰어가 지정 컷을 촬영해 ZIP 1개로 업로드합니다." },
+      { label: "사진 리뷰", desc: "업체가 올린 사진을 사진 리뷰어에게 한 세트씩 자동 배정합니다." },
       { label: "기간 배분", desc: "시작·종료일(최대 10일)을 정하고 날짜별로 인원을 배분합니다." },
     ],
   },
@@ -488,7 +488,7 @@ export default function CampaignWizard() {
                   <div className="rounded-2xl border border-border/70 bg-secondary/30 p-4">
                     <p className="text-sm font-bold text-foreground">📷 사진 리뷰는 이렇게 진행돼요</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      리뷰어가 지정 컷을 촬영한 뒤, 한 명에게 할당된 사진을 <b className="text-foreground">ZIP 1개</b>로 압축해 업로드합니다.
+                      업체가 사진을 <b className="text-foreground">리뷰어별 폴더</b>로 묶어 <b className="text-foreground">ZIP 1개</b>로 올리면, 사진 리뷰어에게 한 세트씩 <b className="text-foreground">자동 배정</b>됩니다. 리뷰어는 배정받은 사진으로 리뷰를 작성해요.
                     </p>
                     <div className="mt-3 flex flex-wrap items-center gap-3">
                       <div className="grid shrink-0 grid-cols-2 gap-1">
@@ -501,13 +501,13 @@ export default function CampaignWizard() {
                         <span className="text-xl">🗜️</span>
                         <span className="text-[10px] font-bold text-primary">review.zip</span>
                       </div>
-                      <span className="text-xs text-muted-foreground">여러 장 → 최종 압축본 1개</span>
+                      <span className="text-xs text-muted-foreground">리뷰어별 폴더 → 각자에게 자동 배정</span>
                     </div>
 
                     {/* 사진 리뷰 ZIP 업로드 */}
                     <div className="mt-4 border-t border-border/50 pt-4">
                       <Label className="font-semibold">사진 리뷰 ZIP 업로드 <span className="font-normal text-muted-foreground">(선택)</span></Label>
-                      <p className="mb-2 mt-0.5 text-xs text-muted-foreground">리뷰어에게 전달할 촬영 가이드/예시 사진을 ZIP 1개로 올려주세요. (.zip · 50MB 이하)</p>
+                      <p className="mb-2 mt-0.5 text-xs text-muted-foreground">리뷰어에게 배정할 사진을 <b className="text-foreground">리뷰어별 폴더</b>로 묶어 ZIP 1개로 올려주세요. 폴더 하나 = 사진 리뷰어 한 명 몫. (.zip · 50MB 이하)</p>
                       <input ref={zipRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" className="hidden" onChange={onZipFile} />
                       {data.photoZip ? (
                         <div className="flex items-center gap-3 rounded-xl border border-border/70 bg-card px-3 py-2.5">

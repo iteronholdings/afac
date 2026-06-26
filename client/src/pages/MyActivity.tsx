@@ -38,6 +38,12 @@ import { Link, useLocation } from "wouter";
 
 type ProofKind = "search" | "purchase" | "review";
 
+const REVIEW_TYPE_LABEL: Record<string, string> = {
+  photo: "📷 사진 리뷰",
+  text: "📝 글자 리뷰",
+  star: "⭐ 별점 리뷰",
+};
+
 export default function MyActivity() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
@@ -186,9 +192,16 @@ export default function MyActivity() {
 
                     <div className="flex min-w-0 flex-1 flex-col gap-2">
                       <div className="flex items-start justify-between gap-2">
-                        <h3 className="font-semibold leading-snug text-foreground">
-                          {c?.title ?? "삭제된 캠페인"}
-                        </h3>
+                        <div className="min-w-0">
+                          <h3 className="font-semibold leading-snug text-foreground">
+                            {c?.title ?? "삭제된 캠페인"}
+                          </h3>
+                          {p.reviewType && (
+                            <span className="mt-1 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                              {REVIEW_TYPE_LABEL[p.reviewType]} 배정
+                            </span>
+                          )}
+                        </div>
                         <span
                           className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_BADGE[status]}`}
                         >
@@ -305,7 +318,7 @@ export default function MyActivity() {
                       </Button>
                     )}
 
-                    {/* 촬영 가이드 ZIP 다운로드 (할당된 경우) */}
+                    {/* 배정된 사진 ZIP 다운로드 (할당된 경우) */}
                     {p.hasPacket && (
                       <Button
                         size="sm"
@@ -313,7 +326,7 @@ export default function MyActivity() {
                         className="bg-primary/5 text-primary"
                         onClick={() => downloadPacket(p.id)}
                       >
-                        <FolderArchive className="mr-1.5 h-4 w-4" /> 촬영 가이드 받기
+                        <FolderArchive className="mr-1.5 h-4 w-4" /> 배정된 사진 받기
                       </Button>
                     )}
 

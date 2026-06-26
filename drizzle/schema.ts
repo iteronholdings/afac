@@ -155,6 +155,9 @@ export const participations = mysqlTable("participations", {
   /** Optional memo from admin (e.g. rejection reason or payout note). */
   adminMemo: text("adminMemo"),
 
+  /** 자동 배정된 리뷰 유형. photo: 사진, text: 글자, star: 별점. */
+  reviewType: mysqlEnum("reviewType", ["photo", "text", "star"]),
+
   /** 사진 리뷰 ZIP에서 이 리뷰어에게 할당된 패킷 (base64 zip data URL). */
   assignedPacket: longtext("assignedPacket"),
   /** 할당된 패킷의 이름 (ZIP 내 폴더/파일명). */
@@ -281,7 +284,18 @@ export const depositRequests = mysqlTable("deposit_requests", {
   repName: varchar("repName", { length: 40 }),
   companyName: varchar("companyName", { length: 100 }),
   taxEmail: varchar("taxEmail", { length: 120 }),
-  /** pending: 승인 대기, approved: 승인 완료(반영됨), rejected: 거절. */
+  /** 충전 방식. manual: 무통장+관리자 승인, vbank: PortOne 가상계좌 자동반영. */
+  method: mysqlEnum("method", ["manual", "vbank"]).default("manual").notNull(),
+  /** PortOne 결제건 식별자 (vbank). */
+  paymentId: varchar("paymentId", { length: 80 }),
+  /** 발급된 가상계좌 정보 (vbank). */
+  vbankBank: varchar("vbankBank", { length: 40 }),
+  vbankNumber: varchar("vbankNumber", { length: 40 }),
+  vbankHolder: varchar("vbankHolder", { length: 40 }),
+  vbankDue: varchar("vbankDue", { length: 40 }),
+  /** 실제 입금 확인되어 예치금에 반영된 시각 (vbank). */
+  paidAt: timestamp("paidAt"),
+  /** pending: 승인 대기/입금 대기, approved: 반영 완료, rejected: 거절/취소. */
   status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
   /** 처리한 관리자 user.id. */
   processedBy: int("processedBy"),

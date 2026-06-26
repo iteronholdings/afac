@@ -58,8 +58,41 @@ export const participationRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: "이미 참여 신청한 캠페인입니다." });
       }
 
-      const taken = await db.countActiveParticipations(input.campaignId);
-      if (taken >= campaign.slots) {
+      // 리뷰 유형별 정원 (사진 → 글자 → 별점 순으로 선착순 자동배정)
+      const caps = {
+        photo: campaign.photoCount ?? 0,
+        text: campaign.textCount ?? 0,
+        star: campaign.starCount ?? 0,
+      } as const;
+      const totalCap = caps.photo + caps.text + caps.star;
+
+      // 유형 구분이 없는 (구) 캠페인은 기존 방식대로 총 정원만 체크.
+      if (totalCap === 0) {
+        const taken = await db.countActiveParticipations(input.campaignId);
+        if (taken >= campaign.slots) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "모집 인원이 마감되었습니다." });
+        }
+        return db.createParticipation({
+          campaignId: input.campaignId,
+          userId: ctx.user.id,
+          status: "applied",
+        });
+      }
+
+      // 현재 유형별 충원 현황 집계 (반려 제외)
+      const parts = await db.listParticipationsByCampaign(input.campaignId);
+      const takenByType = { photo: 0, text: 0, star: 0 };
+      for (const p of parts) {
+        if (p.status === "rejected") continue;
+        if (p.reviewType && p.reviewType in takenByType) {
+          takenByType[p.reviewType as keyof typeof takenByType]++;
+        }
+      }
+
+      // 사진 → 글자 → 별점 순으로 첫 빈 슬롯에 배정
+      const order = ["photo", "text", "star"] as const;
+      const assigned = order.find(t => takenByType[t] < caps[t]) ?? null;
+      if (!assigned) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "모집 인원이 마감되었습니다." });
       }
 
@@ -67,6 +100,7 @@ export const participationRouter = router({
         campaignId: input.campaignId,
         userId: ctx.user.id,
         status: "applied",
+        reviewType: assigned,
       });
     }),
 
