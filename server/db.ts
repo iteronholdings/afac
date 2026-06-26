@@ -61,6 +61,8 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE participations ADD COLUMN assignedPacket LONGTEXT`,
     sql`ALTER TABLE participations ADD COLUMN assignedName VARCHAR(255)`,
     sql`ALTER TABLE participations ADD COLUMN reviewType ENUM('photo','text','star')`,
+    sql`ALTER TABLE campaigns ADD COLUMN paidAmount INT NOT NULL DEFAULT 0`,
+    sql`ALTER TABLE campaigns ADD COLUMN refundedAt TIMESTAMP NULL`,
     sql`ALTER TABLE deposit_requests ADD COLUMN taxInvoice ENUM('issue','none') NOT NULL DEFAULT 'none'`,
     sql`ALTER TABLE deposit_requests ADD COLUMN bizNumber VARCHAR(20)`,
     sql`ALTER TABLE deposit_requests ADD COLUMN repName VARCHAR(40)`,

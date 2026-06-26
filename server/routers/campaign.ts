@@ -24,6 +24,26 @@ const campaignInput = z.object({
   photoGuideZipName: z.string().max(255).optional(),
 });
 
+/**
+ * 신청 시 차감했던 예치금을 업체에 환불한다. (반려·삭제 시 호출)
+ * paidAmount가 있고 아직 환불 전(refundedAt 없음)일 때만 1회 실행 → 중복 환불 방지.
+ */
+async function refundCampaignIfPaid(
+  campaign: NonNullable<Awaited<ReturnType<typeof db.getCampaignById>>>,
+  adminId: number,
+) {
+  if (campaign.createdBy && (campaign.paidAmount ?? 0) > 0 && !campaign.refundedAt) {
+    await db.adjustDeposit({
+      userId: campaign.createdBy,
+      amount: campaign.paidAmount,
+      type: "refund",
+      memo: `캠페인 환불: ${campaign.title}`,
+      createdBy: adminId,
+    });
+    await db.updateCampaign(campaign.id, { refundedAt: new Date() });
+  }
+}
+
 export const campaignRouter = router({
   // Public: list open campaigns for homepage preview (max 3).
   listPreview: publicProcedure.query(async () => {
@@ -93,22 +113,26 @@ export const campaignRouter = router({
       return db.updateCampaign(id, rest);
     }),
 
-  // Admin: delete campaign (and its participations).
+  // Admin: delete campaign (and its participations). 결제된 캠페인이면 예치금 환불.
   remove: adminProcedure
     .input(z.object({ id: z.number().int() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const existing = await db.getCampaignById(input.id);
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
+      await refundCampaignIfPaid(existing, ctx.user.id);
       await db.deleteCampaign(input.id);
       return { id: input.id };
     }),
 
-  // Admin: toggle status (open/closed/pending/rejected).
+  // Admin: toggle status. rejected로 바꾸면 차감했던 예치금을 자동 환불.
   setStatus: adminProcedure
     .input(z.object({ id: z.number().int(), status: z.enum(["pending", "open", "closed", "rejected", "in_progress", "error"]) }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const existing = await db.getCampaignById(input.id);
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
+      if (input.status === "rejected") {
+        await refundCampaignIfPaid(existing, ctx.user.id);
+      }
       return db.updateCampaign(input.id, { status: input.status });
     }),
 
@@ -181,6 +205,7 @@ export const campaignRouter = router({
         ...input,
         status: "pending",
         createdBy: ctx.user.id,
+        paidAmount: total, // 반려·삭제 시 이 금액을 환불
       });
 
       // Deduct after the campaign row exists so we can reference it in the memo.

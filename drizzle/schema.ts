@@ -97,6 +97,10 @@ export const campaigns = mysqlTable("campaigns", {
    * error(오류) · closed(작업완료) · rejected(반려).
    */
   status: mysqlEnum("status", ["pending", "open", "closed", "rejected", "in_progress", "error"]).default("open").notNull(),
+  /** 신청 시 예치금에서 차감된 금액(원). 0이면 차감 없음(관리자 생성 등). 환불 기준액. */
+  paidAmount: int("paidAmount").notNull().default(0),
+  /** 환불 완료 시각. 설정돼 있으면 이미 환불됨(중복 환불 방지). */
+  refundedAt: timestamp("refundedAt"),
   /** User.id who created/requested this campaign (admin or business). */
   createdBy: int("createdBy"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
