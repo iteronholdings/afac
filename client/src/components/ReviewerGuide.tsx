@@ -11,7 +11,7 @@ const STEPS: { icon: typeof Search; title: string; desc: string }[] = [
   { icon: Camera, title: "3. 인증샷 등록", desc: "'내 활동'에서 검색 → 구매 → 리뷰 순서로 각 단계의 인증샷(스크린샷)을 차례로 업로드합니다." },
   { icon: PenLine, title: "4. 리뷰 작성", desc: "구매한 상품에 대해 캠페인 가이드에 맞춰 리뷰(판매자/상품/배송)를 정성껏 작성하고 인증샷을 등록합니다." },
   { icon: BadgeCheck, title: "5. 운영팀 검수·승인", desc: "등록한 인증 내역을 운영팀이 확인합니다. 누락·오류가 있으면 반려될 수 있으니 안내에 맞게 진행해 주세요." },
-  { icon: Wallet, title: "6. 정산 지급", desc: "승인이 완료되면 상품비 환급 + 리뷰 수수료가 가입 시 등록한 정산 계좌로 입금됩니다." },
+  { icon: Wallet, title: "6. 정산 지급", desc: "승인이 완료되면 상품비 환급 + 작업수당이 가입 시 등록한 정산 계좌로 입금됩니다." },
 ];
 
 const RULES: string[] = [

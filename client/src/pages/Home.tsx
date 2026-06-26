@@ -284,7 +284,7 @@ export default function Home() {
                   <p className="font-semibold">{formatKRW(selected.productPrice)}</p>
                 </div>
                 <div className="rounded-2xl border border-border/70 p-3 text-center">
-                  <p className="text-xs text-muted-foreground">리뷰 수수료</p>
+                  <p className="text-xs text-muted-foreground">작업수당</p>
                   <p className="font-semibold">{formatKRW(selected.commission)}</p>
                 </div>
               </div>

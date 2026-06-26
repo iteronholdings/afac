@@ -102,9 +102,9 @@ export default function CampaignCard({
             />
           </div>
 
-          {/* 수수료 — 보조 정보 */}
+          {/* 작업수당 — 보조 정보 */}
           <div className="flex items-center justify-between pt-0.5 text-xs text-muted-foreground">
-            <span>수수료 {formatKRW(campaign.commission)}</span>
+            <span>작업수당 {formatKRW(campaign.commission)}</span>
             <span>상품비 {formatKRW(campaign.productPrice)}</span>
           </div>
         </div>

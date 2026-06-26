@@ -93,7 +93,7 @@ export default function Campaigns() {
           </span>
           <h1 className="text-2xl font-bold text-foreground sm:text-3xl">캠페인 둘러보기</h1>
           <p className="text-muted-foreground">
-            원하는 캠페인에 참여하고 상품을 구매한 뒤 리뷰를 남기면 상품비와 수수료를 지급받습니다.
+            원하는 캠페인에 참여하고 상품을 구매한 뒤 리뷰를 남기면 상품비와 작업수당을 지급받습니다.
           </p>
         </div>
 
@@ -217,7 +217,7 @@ export default function Campaigns() {
                   <p className="font-semibold">{formatKRW(selected.productPrice)}</p>
                 </div>
                 <div className="rounded-2xl border border-border/70 p-3 text-center">
-                  <p className="text-xs text-muted-foreground">리뷰 수수료</p>
+                  <p className="text-xs text-muted-foreground">작업수당</p>
                   <p className="font-semibold">{formatKRW(selected.commission)}</p>
                 </div>
               </div>

@@ -76,7 +76,7 @@ export default function Signup() {
   return (
     <AuthLayout
       title="리뷰어 회원가입"
-      subtitle="캠페인에 참여해 상품을 구매하고 리뷰를 남기면 수수료를 받아요."
+      subtitle="캠페인에 참여해 상품을 구매하고 리뷰를 남기면 작업수당을 받아요."
       footer={
         <>
           이미 계정이 있으신가요?{" "}
