@@ -1,6 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { ARBEN_LOGO_URL } from "@/components/BrandLogo";
 import ChargeRequestDialog from "@/components/ChargeRequestDialog";
+import { trpc } from "@/lib/trpc";
 import {
   BarChart3,
   ChevronDown,
@@ -8,6 +9,7 @@ import {
   Home,
   LogOut,
   type LucideIcon,
+  MessageCircle,
   Rocket,
   Search,
   Sparkles,
@@ -47,6 +49,7 @@ const NAV: NavSection[] = [
           { label: "캠페인 관리", href: "/client/campaigns" },
         ],
       },
+      { label: "메시지", sub: "리뷰어 · 운영팀 문의", icon: MessageCircle, href: "/client/messages" },
       { label: "상위노출 컨설팅 의뢰", sub: "맞춤 전략 1:1 상담", icon: Rocket, href: "/client/consulting" },
       { label: "SEO 자가진단", sub: "예시 리포트", icon: Search, soon: true },
       { label: "순위조회", sub: "네이버 · 쿠팡", icon: TrendingUp, soon: true },
@@ -131,10 +134,15 @@ function NavGroup({ item, location }: { item: NavItem; location: string }) {
   );
 }
 
-function NavRow({ item, location }: { item: NavItem; location: string }) {
+function NavRow({ item, location, badge }: { item: NavItem; location: string; badge?: number }) {
   if (item.children) return <NavGroup item={item} location={location} />;
 
   const active = !!item.href && (item.exact ? location === item.href : location.startsWith(item.href));
+  const badgeEl = badge && badge > 0 ? (
+    <span className={`ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full px-1.5 text-[10px] font-bold ${active ? "bg-white/25 text-white" : "bg-red-500 text-white"}`}>
+      {badge > 9 ? "9+" : badge}
+    </span>
+  ) : undefined;
 
   if (item.soon || !item.href) {
     return (
@@ -145,7 +153,7 @@ function NavRow({ item, location }: { item: NavItem; location: string }) {
   }
   return (
     <Link href={item.href}>
-      <NavRowShell item={item} active={active} />
+      <NavRowShell item={item} active={active}>{badgeEl}</NavRowShell>
     </Link>
   );
 }
@@ -165,6 +173,11 @@ export default function ClientLayout({
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [chargeOpen, setChargeOpen] = useState(false);
+
+  // 메시지 안읽음 배지 (리뷰어 + 운영팀)
+  const { data: bizUnread = 0 } = trpc.businessMessage.unreadCount.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 5000 });
+  const { data: opsUnread = 0 } = trpc.directMessage.unreadCount.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 5000 });
+  const messageUnread = (bizUnread || 0) + (opsUnread || 0);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -204,7 +217,7 @@ export default function ClientLayout({
             </p>
             <div className="space-y-1">
               {section.items.map(item => (
-                <NavRow key={item.label} item={item} location={location} />
+                <NavRow key={item.label} item={item} location={location} badge={item.href === "/client/messages" ? messageUnread : 0} />
               ))}
             </div>
           </div>

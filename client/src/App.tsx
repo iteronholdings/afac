@@ -21,6 +21,7 @@ import ClientSignup from "./pages/client/ClientSignup";
 import ClientHome from "./pages/client/ClientHome";
 import ClientConsulting from "./pages/client/ClientConsulting";
 import ClientDeposit from "./pages/client/ClientDeposit";
+import ClientMessages from "./pages/client/ClientMessages";
 import CampaignWizard from "./pages/client/CampaignWizard";
 import Campaigns from "./pages/Campaigns";
 import Home from "./pages/Home";
@@ -121,6 +122,7 @@ function Router() {
       <Route path="/client/login" component={ClientLogin} />
       <Route path="/client/signup" component={ClientSignup} />
       <Route path="/client/dashboard" component={() => <ProtectedRoute component={ClientHome} loginPath="/client/login" role="business" />} />
+      <Route path="/client/messages" component={() => <ProtectedRoute component={ClientMessages} loginPath="/client/login" role="business" />} />
       <Route path="/client/campaigns" component={() => <ProtectedRoute component={BusinessDashboard} loginPath="/client/login" role="business" />} />
       <Route path="/client/campaign/new" component={() => <ProtectedRoute component={CampaignWizard} loginPath="/client/login" role="business" />} />
       <Route path="/client/consulting" component={() => <ProtectedRoute component={ClientConsulting} loginPath="/client/login" role="business" />} />
