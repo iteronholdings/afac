@@ -24,6 +24,20 @@ const RULES: string[] = [
 export default function ReviewerGuide() {
   return (
     <div className="space-y-6">
+      {/* 참고 이미지 (client/public/onboarding/guide-1~3.png 등록 시 표시) */}
+      <div className="space-y-4">
+        {[1, 2, 3].map(n => (
+          <img
+            key={n}
+            src={`/onboarding/guide-${n}.png`}
+            alt={`리뷰어 절차 안내 ${n}`}
+            loading="lazy"
+            className="w-full rounded-2xl border border-border/60 shadow-sm"
+            onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+          />
+        ))}
+      </div>
+
       {/* 절차 단계 */}
       <div className="space-y-3">
         {STEPS.map(({ icon: Icon, title, desc }) => (

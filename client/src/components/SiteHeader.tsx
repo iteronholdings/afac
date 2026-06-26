@@ -8,10 +8,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Building2, ClipboardList, LayoutDashboard, LogOut, Menu, UserRound } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Building2, ClipboardList, LayoutDashboard, ListChecks, LogOut, Menu, UserRound } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import BrandLogo from "@/components/BrandLogo";
+import ReviewerGuide from "@/components/ReviewerGuide";
 
 type NavLink = { label: string; href: string };
 
@@ -26,6 +28,8 @@ const BUSINESS_NAV_LINKS: NavLink[] = [
 export default function SiteHeader() {
   const { user, isAuthenticated, loading, logout } = useAuth();
   const [open, setOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const isReviewer = user?.role !== "business" && user?.role !== "admin";
 
   const initial = (user?.fullName || user?.name || "리").charAt(0);
   const navLinks = user?.role === "business" ? BUSINESS_NAV_LINKS : REVIEWER_NAV_LINKS;
@@ -48,6 +52,14 @@ export default function SiteHeader() {
                 {link.label}
               </Link>
             ))}
+            {isReviewer && (
+              <button
+                onClick={() => setGuideOpen(true)}
+                className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <ListChecks className="h-4 w-4" /> 절차 안내
+              </button>
+            )}
           </nav>
         )}
 
@@ -140,11 +152,28 @@ export default function SiteHeader() {
                     <Link href={link.href}>{link.label}</Link>
                   </DropdownMenuItem>
                 ))}
+                {isReviewer && (
+                  <DropdownMenuItem onClick={() => setGuideOpen(true)}>
+                    <ListChecks className="mr-2 h-4 w-4" /> 절차 안내
+                  </DropdownMenuItem>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           )}
         </div>
       </div>
+
+      {/* 리뷰어 절차 안내 다이얼로그 */}
+      <Dialog open={guideOpen} onOpenChange={setGuideOpen}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ListChecks className="h-5 w-5 text-primary" /> 리뷰어 활동 절차 안내
+            </DialogTitle>
+          </DialogHeader>
+          <ReviewerGuide />
+        </DialogContent>
+      </Dialog>
     </header>
   );
 }
