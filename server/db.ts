@@ -78,6 +78,7 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE deposit_requests ADD COLUMN vbankHolder VARCHAR(40)`,
     sql`ALTER TABLE deposit_requests ADD COLUMN vbankDue VARCHAR(40)`,
     sql`ALTER TABLE deposit_requests ADD COLUMN paidAt TIMESTAMP NULL`,
+    sql`ALTER TABLE participations ADD COLUMN reviewDraft TEXT`,
   ];
   for (const stmt of alterStatements) {
     try {

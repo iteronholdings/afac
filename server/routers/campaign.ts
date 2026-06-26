@@ -10,6 +10,7 @@ import {
   storageGetSignedPutUrl,
   storagePut,
 } from "../storage";
+import { generateReviewDraft } from "../reviewDraft";
 
 /** photoGuideZip / assignedPacket 값이 R2 키 참조(`r2:<key>`)면 키를, 아니면 null 반환. */
 function r2KeyOf(value?: string | null): string | null {
@@ -142,15 +143,20 @@ export async function assignPacketsForCampaign(
       out.file(rel || unitName, await file.async("uint8array"));
     }
     const assignedName = `${unitName}.zip`;
+    // 패킷 배정 시 리뷰 원고가 없으면 함께 생성(사진형). join 누락분 backfill.
+    const draftPatch = parts[i].reviewDraft
+      ? {}
+      : { reviewDraft: generateReviewDraft({ type: "photo", title: campaign.title, keyword: campaign.keyword }) };
     if (useR2) {
       const bytes = await out.generateAsync({ type: "uint8array", compression: "DEFLATE" });
       const { key } = await storagePut(`review-packets/${campaign.id}/${unitName}.zip`, bytes, "application/zip");
-      await db.updateParticipation(parts[i].id, { assignedPacket: `r2:${key}`, assignedName });
+      await db.updateParticipation(parts[i].id, { assignedPacket: `r2:${key}`, assignedName, ...draftPatch });
     } else {
       const packetB64 = await out.generateAsync({ type: "base64", compression: "DEFLATE" });
       await db.updateParticipation(parts[i].id, {
         assignedPacket: `data:application/zip;base64,${packetB64}`,
         assignedName,
+        ...draftPatch,
       });
     }
     assigned++;

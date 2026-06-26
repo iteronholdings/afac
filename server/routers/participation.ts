@@ -3,6 +3,7 @@ import { z } from "zod";
 import * as db from "../db";
 import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
 import { assignPacketsForCampaign } from "./campaign";
+import { generateReviewDraft } from "../reviewDraft";
 
 /**
  * 사진 리뷰어가 가입하면 업로드된 가이드 ZIP에서 본인 몫 패킷을 자동 배정한다.
@@ -14,6 +15,23 @@ async function tryAutoAssignPacket(campaignId: number) {
     if (campaign?.photoGuideZip) await assignPacketsForCampaign(campaign);
   } catch (e) {
     console.error("[auto-assign packet] skipped:", e);
+  }
+}
+
+/**
+ * 새 참여자에게 AI 리뷰 원고 초안을 생성·저장한다. (사진·글자 리뷰어 대상, 별점 제외)
+ * best-effort. reviewType이 photo면 사진형, 그 외(text·구캠페인 null)는 글자형 톤.
+ */
+async function tryAssignReviewDraft(participationId: number, reviewType: string | null | undefined, campaignId: number) {
+  if (reviewType === "star") return; // 별점 리뷰어는 원고 없음
+  try {
+    const campaign = await db.getCampaignById(campaignId);
+    if (!campaign) return;
+    const type = reviewType === "photo" ? "photo" : "text";
+    const draft = generateReviewDraft({ type, title: campaign.title, keyword: campaign.keyword });
+    await db.updateParticipation(participationId, { reviewDraft: draft });
+  } catch (e) {
+    console.error("[review draft] skipped:", e);
   }
 }
 
@@ -99,6 +117,7 @@ export const participationRouter = router({
           status: "applied",
         });
         await tryAutoAssignPacket(input.campaignId); // 구 캠페인(유형 무관)도 패킷 자동배정
+        if (created) await tryAssignReviewDraft(created.id, null, input.campaignId); // 원고 자동생성
         return created;
       }
 
@@ -126,6 +145,7 @@ export const participationRouter = router({
         reviewType: assigned,
       });
       if (assigned === "photo") await tryAutoAssignPacket(input.campaignId); // 사진 리뷰어 패킷 자동배정
+      if (created) await tryAssignReviewDraft(created.id, assigned, input.campaignId); // 원고 자동생성
       return created;
     }),
 

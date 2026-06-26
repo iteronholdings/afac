@@ -24,12 +24,14 @@ import {
 } from "@/lib/workflow";
 import {
   ClipboardList,
+  Copy,
   FolderArchive,
   ImageIcon,
   MessageCircle,
   PackageCheck,
   PencilLine,
   Search,
+  Sparkles,
   Wallet,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -82,6 +84,14 @@ export default function MyActivity() {
       a.remove();
     } catch (e) {
       toast.error("다운로드에 실패했습니다.");
+    }
+  };
+  const copyDraft = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success("리뷰 원고를 복사했어요! 붙여넣어 사용하세요 🐻");
+    } catch {
+      toast.error("복사에 실패했어요. 길게 눌러 직접 복사해 주세요.");
     }
   };
   const [proofUrl, setProofUrl] = useState<string | null>(null);
@@ -228,6 +238,27 @@ export default function MyActivity() {
                   <div className="border-t border-border/60 px-5 py-4">
                     <WorkflowStepper status={status} />
                   </div>
+
+                  {/* AI 리뷰 원고 (사진·글자 리뷰어에게 자동 생성·배정) */}
+                  {p.reviewDraft && !["approved", "paid", "rejected"].includes(status) && (
+                    <div className="border-t border-border/60 bg-primary/5 px-5 py-4">
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1.5 text-sm font-bold text-primary">
+                          <Sparkles className="h-4 w-4" /> 추천 리뷰 원고
+                        </span>
+                        <Button size="sm" variant="outline" className="h-7 gap-1 bg-card px-2 text-xs"
+                          onClick={() => copyDraft(p.reviewDraft!)}>
+                          <Copy className="h-3.5 w-3.5" /> 복사
+                        </Button>
+                      </div>
+                      <p className="whitespace-pre-wrap rounded-xl border border-border/60 bg-card px-3 py-2.5 text-sm leading-relaxed text-foreground">
+                        {p.reviewDraft}
+                      </p>
+                      <p className="mt-1.5 text-[11px] text-muted-foreground">
+                        참고용 초안이에요. 본인 말투로 자연스럽게 다듬어 작성하면 더 좋아요 🐻
+                      </p>
+                    </div>
+                  )}
 
                   {/* Action area based on status */}
                   <div className="flex flex-wrap items-center gap-2 border-t border-border/60 bg-secondary/30 px-5 py-3">

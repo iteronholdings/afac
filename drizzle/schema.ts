@@ -167,6 +167,9 @@ export const participations = mysqlTable("participations", {
   /** 할당된 패킷의 이름 (ZIP 내 폴더/파일명). */
   assignedName: varchar("assignedName", { length: 255 }),
 
+  /** 자동 생성된 리뷰 원고 초안 (사진·글자 리뷰어용). 리뷰어가 참고/복사해 작성. */
+  reviewDraft: text("reviewDraft"),
+
   appliedAt: timestamp("appliedAt").defaultNow().notNull(),
   searchedAt: timestamp("searchedAt"),
   purchasedAt: timestamp("purchasedAt"),
