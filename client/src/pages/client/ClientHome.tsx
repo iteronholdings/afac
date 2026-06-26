@@ -51,9 +51,8 @@ export default function ClientHome() {
   const stats = useMemo(() => {
     const active = campaigns.filter(c => c.status === "open").length;
     const pending = campaigns.filter(c => c.status === "pending").length;
-    const totalSlots = campaigns.reduce((s, c) => s + (c.slots ?? 0), 0);
-    const totalTaken = campaigns.reduce((s, c) => s + (c.taken ?? 0), 0);
-    return { active, pending, totalSlots, totalTaken, total: campaigns.length };
+    const closed = campaigns.filter(c => c.status === "closed").length;
+    return { active, pending, closed, total: campaigns.length };
   }, [campaigns]);
 
   const recent = campaigns.slice(0, 4);
@@ -62,8 +61,8 @@ export default function ClientHome() {
   const KPIS = [
     { label: "진행 중 캠페인", value: stats.active, suffix: "건", emoji: "🚀", tint: "text-primary", bg: "bg-primary/10" },
     { label: "승인 대기", value: stats.pending, suffix: "건", emoji: "⏳", tint: "text-amber-600", bg: "bg-amber-100/70" },
-    { label: "총 모집 인원", value: stats.totalSlots, suffix: "명", emoji: "🙌", tint: "text-secondary-foreground", bg: "bg-secondary" },
-    { label: "참여 완료", value: stats.totalTaken, suffix: "명", emoji: "🎉", tint: "text-primary", bg: "bg-accent" },
+    { label: "완료 캠페인", value: stats.closed, suffix: "건", emoji: "✅", tint: "text-emerald-600", bg: "bg-emerald-100/70" },
+    { label: "예치금 잔액", value: user?.depositBalance ?? 0, suffix: "원", emoji: "💰", tint: "text-primary", bg: "bg-accent" },
   ];
 
   return (
