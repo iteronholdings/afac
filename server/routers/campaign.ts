@@ -206,7 +206,9 @@ export const campaignRouter = router({
     const withCounts = await Promise.all(
       rows.map(async c => {
         const taken = await db.countActiveParticipations(c.id);
-        return { ...c, taken, remaining: Math.max(0, c.slots - taken) };
+        // 무거운 photoGuideZip(base64, 최대 ~40MB)은 목록에서 제외 — 존재 여부만 노출.
+        const { photoGuideZip, ...rest } = c;
+        return { ...rest, hasPhotoGuideZip: !!photoGuideZip, taken, remaining: Math.max(0, c.slots - taken) };
       })
     );
     return withCounts;
