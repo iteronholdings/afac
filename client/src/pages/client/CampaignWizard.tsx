@@ -322,8 +322,10 @@ export default function CampaignWizard() {
     if (step === 1) {
       if (totalReviewers < 1) { toast.error("모집 인원을 1명 이상 입력해 주세요."); return false; }
       if (!data.startDate) { toast.error("시작 날짜를 선택해 주세요."); return false; }
+      if (data.startDate < todayStr()) { toast.error("시작 날짜는 오늘 이후로 선택해 주세요."); return false; }
       if (data.distributeMode === "distribute") {
         if (!data.endDate) { toast.error("종료 날짜를 선택해 주세요."); return false; }
+        if (data.endDate < data.startDate) { toast.error("종료 날짜는 시작 날짜 이후여야 해요."); return false; }
         if (data.endDate > plusDays(data.startDate, 9)) { toast.error("기간은 최대 10일까지 설정할 수 있어요."); return false; }
         if (scheduleSum > totalReviewers) { toast.error("인원 배분을 초과합니다."); return false; }
         if (scheduleSum < totalReviewers) { toast.error("인원 배분이 부족합니다. 합계와 맞춰주세요."); return false; }

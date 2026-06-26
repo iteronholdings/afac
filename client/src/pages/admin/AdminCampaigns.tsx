@@ -207,6 +207,10 @@ export default function AdminCampaigns() {
                     <p className="text-muted-foreground">건당 총 지급액</p>
                     <p className="font-bold">{formatKRW(totalPayout(c.productPrice, c.commission))}</p>
                   </div>
+                  <div className="col-span-2 rounded-lg bg-primary/10 px-2.5 py-2">
+                    <p className="text-muted-foreground">💳 예치금 사용액 <span className="text-[10px]">(업체 결제)</span></p>
+                    <p className="text-sm font-extrabold text-primary">{c.paidAmount > 0 ? formatKRW(c.paidAmount) : "—"}</p>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
