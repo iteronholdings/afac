@@ -130,7 +130,7 @@ export default function CampaignWizard() {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<WizardData>(INIT);
 
-  // 임시저장 이어쓰기: URL의 ?draft=<id> 로 진입하면 해당 임시저장본을 불러온다.
+  // 임시저장 이어쓰기: ?draft=<id> 로 진입하거나, 없으면 가장 최근 임시저장본을 자동으로 불러온다.
   const initialDraftId = (() => {
     const id = new URLSearchParams(window.location.search).get("draft");
     return id && /^\d+$/.test(id) ? Number(id) : null;
@@ -139,17 +139,24 @@ export default function CampaignWizard() {
   const draftIdRef = useRef<number | null>(initialDraftId);
   useEffect(() => { draftIdRef.current = draftId; }, [draftId]);
 
+  // URL에 draft가 없으면 내 임시저장 목록(최신순)에서 가장 최근 것을 자동 선택.
+  const myDraftsQuery = trpc.campaign.myDrafts.useQuery(undefined, { enabled: initialDraftId == null });
+  const loadDraftId = initialDraftId ?? myDraftsQuery.data?.[0]?.id ?? null;
+
   const draftQuery = trpc.campaign.getDraft.useQuery(
-    { id: initialDraftId! },
-    { enabled: initialDraftId != null },
+    { id: loadDraftId! },
+    { enabled: loadDraftId != null },
   );
+  const draftLoadedRef = useRef(false); // 자동 불러오기는 한 번만 (작성 중 덮어쓰기 방지)
   useEffect(() => {
-    const raw = draftQuery.data?.data;
-    if (!raw) return;
+    const draft = draftQuery.data;
+    if (!draft?.data || draftLoadedRef.current) return;
     try {
-      const parsed = JSON.parse(raw) as Partial<WizardData>;
+      const parsed = JSON.parse(draft.data) as Partial<WizardData>;
       setData(prev => ({ ...prev, ...parsed }));
-      toast.success("임시저장한 내용을 불러왔어요 🐻");
+      setDraftId(draft.id);
+      draftLoadedRef.current = true;
+      toast.success("이전에 임시저장한 내용을 불러왔어요 🐻");
     } catch { /* 손상된 임시저장은 무시 */ }
   }, [draftQuery.data]);
 
@@ -223,6 +230,7 @@ export default function CampaignWizard() {
   const saveDraftMutation = trpc.campaign.saveDraft.useMutation({
     onSuccess: draft => {
       if (draft?.id) setDraftId(draft.id);
+      draftLoadedRef.current = true; // 저장 후에는 자동 불러오기로 덮어쓰지 않음
       utils.campaign.myDrafts.invalidate();
       toast.success("임시저장되었어요. 나중에 이어서 작성할 수 있어요 🐻");
     },
