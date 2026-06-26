@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
-/** AF 마크 아이콘 (투명 배경, 정사각). */
-export const ARBEN_LOGO_URL = "/af-mark.png";
+/** AF 마크 아이콘 (투명 배경, 정사각). 명확히 'AF'로 읽히는 세리프 모노그램. */
+export const ARBEN_LOGO_URL = "/af-mark.svg";
 /** 브랜드명 (영문). */
 export const BRAND_NAME = "ARVEN FACTORY";
 
