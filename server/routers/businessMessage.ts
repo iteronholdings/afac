@@ -2,7 +2,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
 import { sendPushToUser } from "../webpush";
-import { protectedProcedure, router } from "../_core/trpc";
+import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
 
 /** Resolve (businessId, reviewerId) from the current user + the partner id. */
 async function resolvePair(meId: number, meRole: string, partnerId: number) {
@@ -98,4 +98,42 @@ export const businessMessageRouter = router({
   unreadCount: protectedProcedure.query(async ({ ctx }) => {
     return db.countUnreadBusinessMessages(ctx.user.id);
   }),
+
+  // === 관리자 열람 전용 ===
+
+  /** 모든 업체↔리뷰어 대화쌍(최신 메시지 + 양측 이름). */
+  adminConversations: adminProcedure.query(async () => {
+    const latest = await db.listAllBusinessConversations();
+    return Promise.all(
+      latest.map(async m => {
+        const biz = await db.getUserById(m.businessId);
+        const rev = await db.getUserById(m.reviewerId);
+        return {
+          businessId: m.businessId,
+          reviewerId: m.reviewerId,
+          businessName: biz?.fullName || biz?.name || "알 수 없음",
+          reviewerName: rev?.fullName || rev?.name || "알 수 없음",
+          latestContent: m.content,
+          latestAt: m.createdAt,
+        };
+      })
+    );
+  }),
+
+  /** 특정 업체↔리뷰어 대화 내역(열람 전용). */
+  adminThread: adminProcedure
+    .input(z.object({ businessId: z.number().int(), reviewerId: z.number().int() }))
+    .query(async ({ input }) => {
+      const msgs = await db.listBusinessMessages(input.businessId, input.reviewerId);
+      return Promise.all(
+        msgs.map(async m => {
+          const sender = await db.getUserById(m.fromUserId);
+          return {
+            ...m,
+            senderName: sender?.fullName || sender?.name || "알 수 없음",
+            senderRole: sender?.role ?? "user",
+          };
+        })
+      );
+    }),
 });

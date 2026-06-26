@@ -8,6 +8,7 @@ import { Redirect, Route, Switch, useLocation } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import AdminBusinesses from "./pages/admin/AdminBusinesses";
+import AdminBusinessChats from "./pages/admin/AdminBusinessChats";
 import AdminCampaigns from "./pages/admin/AdminCampaigns";
 import AdminConsulting from "./pages/admin/AdminConsulting";
 import AdminMessages from "./pages/admin/AdminMessages";
@@ -128,6 +129,7 @@ function Router() {
       <Route path="/admin/participations" component={() => <ProtectedRoute component={AdminParticipations} role="admin" />} />
       <Route path="/admin/settlement" component={() => <ProtectedRoute component={AdminSettlement} role="admin" />} />
       <Route path="/admin/messages" component={() => <ProtectedRoute component={AdminMessages} role="admin" />} />
+      <Route path="/admin/business-chats" component={() => <ProtectedRoute component={AdminBusinessChats} role="admin" />} />
       <Route path="/admin/consulting" component={() => <ProtectedRoute component={AdminConsulting} role="admin" />} />
       <Route path="/admin/businesses" component={() => <ProtectedRoute component={AdminBusinesses} role="admin" />} />
       <Route path="/admin/members" component={() => <ProtectedRoute component={AdminMembers} role="admin" />} />

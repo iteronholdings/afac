@@ -801,6 +801,19 @@ export async function listBusinessConversations(userId: number, asRole: "busines
   return Array.from(map.values());
 }
 
+/** 관리자 열람용: 모든 (업체, 리뷰어) 대화쌍의 최신 메시지. */
+export async function listAllBusinessConversations() {
+  const db = await getDb();
+  if (!db) return [];
+  const all = await db.select().from(businessMessages).orderBy(desc(businessMessages.createdAt));
+  const map = new Map<string, typeof all[0]>();
+  for (const m of all) {
+    const key = `${m.businessId}:${m.reviewerId}`;
+    if (!map.has(key)) map.set(key, m);
+  }
+  return Array.from(map.values());
+}
+
 export async function countUnreadBusinessMessages(userId: number) {
   const db = await getDb();
   if (!db) return 0;
