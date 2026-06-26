@@ -38,6 +38,7 @@ type WizardData = {
   starCount: string;
   photoZip: string;
   photoZipName: string;
+  photoZipKey: string; // R2 직접 업로드 키 (있으면 base64 대신 사용)
   distributeMode: DistributeMode;
   startDate: string;
   endDate: string;
@@ -60,6 +61,7 @@ const INIT: WizardData = {
   starCount: "0",
   photoZip: "",
   photoZipName: "",
+  photoZipKey: "",
   distributeMode: "single",
   startDate: "",
   endDate: "",
@@ -143,7 +145,7 @@ export default function CampaignWizard() {
   const autosaveKey = user?.id ? `arben:campaignDraft:${user.id}` : null;
   const restoredRef = useRef(false); // 복원은 한 번만 (작성 중 덮어쓰기 방지)
   const INIT_LIGHT = useMemo(() => {
-    const { photoZip: _z, photoZipName: _zn, ...l } = INIT;
+    const { photoZip: _z, ...l } = INIT; // 큰 base64만 제외 (R2 키·파일명 보존)
     return JSON.stringify(l);
   }, []);
 
@@ -179,7 +181,7 @@ export default function CampaignWizard() {
   // 입력값이 바뀔 때마다 자동 저장 (사진 ZIP은 용량이 커서 제외).
   useEffect(() => {
     if (!autosaveKey || !restoredRef.current) return;
-    const { photoZip: _z, photoZipName: _zn, ...light } = data;
+    const { photoZip: _z, ...light } = data; // 큰 base64만 제외 (R2 키·파일명 보존)
     const s = JSON.stringify(light);
     try {
       if (s === INIT_LIGHT) { localStorage.removeItem(autosaveKey); return; }
@@ -226,15 +228,47 @@ export default function CampaignWizard() {
   };
 
   const zipRef = useRef<HTMLInputElement>(null);
-  const onZipFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [zipUploading, setZipUploading] = useState(false);
+  const presignZip = trpc.campaign.zipUploadUrl.useMutation();
+  const onZipFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    if (e.target) e.target.value = ""; // 같은 파일 재선택 허용
     if (!file) return;
     const isZip = /\.zip$/i.test(file.name) || file.type === "application/zip" || file.type === "application/x-zip-compressed";
     if (!isZip) { toast.error("ZIP(.zip) 파일만 올릴 수 있어요."); return; }
-    if (file.size > 50 * 1024 * 1024) { toast.error("ZIP은 50MB 이하로 올려주세요."); return; }
-    const reader = new FileReader();
-    reader.onload = () => setData(prev => ({ ...prev, photoZip: String(reader.result), photoZipName: file.name }));
-    reader.readAsDataURL(file);
+    if (file.size > 2 * 1024 * 1024 * 1024) { toast.error("ZIP은 2GB 이하로 올려주세요."); return; }
+
+    // R2로 직접 업로드 (presigned PUT) — base64 64MB 한계 우회.
+    // 스토리지 미설정 등으로 presign 실패 시 기존 base64 경로(≤45MB)로 폴백.
+    setZipUploading(true);
+    try {
+      const { url, key } = await presignZip.mutateAsync({ fileName: file.name });
+      const put = await fetch(url, { method: "PUT", body: file });
+      if (!put.ok) throw new Error(`R2 upload failed: ${put.status}`);
+      setData(prev => ({ ...prev, photoZipKey: key, photoZipName: file.name, photoZip: "" }));
+      toast.success(`사진 ZIP 업로드 완료! (${(file.size / 1024 / 1024).toFixed(1)}MB) 🐻`);
+    } catch (err) {
+      console.error("R2 presign upload failed, falling back to base64:", err);
+      if (file.size > 45 * 1024 * 1024) {
+        toast.error("대용량 업로드 준비 중이에요. 45MB 이하 ZIP으로 올려주세요.");
+        setZipUploading(false);
+        return;
+      }
+      try {
+        const dataUrl: string = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result));
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        setData(prev => ({ ...prev, photoZip: dataUrl, photoZipName: file.name, photoZipKey: "" }));
+        toast.success(`사진 ZIP 등록 완료! (${(file.size / 1024 / 1024).toFixed(1)}MB) 🐻`);
+      } catch {
+        toast.error("ZIP 업로드에 실패했어요. 잠시 후 다시 시도해 주세요.");
+      }
+    } finally {
+      setZipUploading(false);
+    }
   };
 
   // 1단계에서 Ctrl+V(캡처 이미지 붙여넣기)로 썸네일 등록.
@@ -265,7 +299,7 @@ export default function CampaignWizard() {
   const dirtyRef = useRef(false);
   const submittedRef = useRef(false);
   useEffect(() => {
-    const { photoZip: _z, photoZipName: _zn, ...light } = data;
+    const { photoZip: _z, ...light } = data; // 큰 base64만 제외 (R2 키·파일명 보존)
     dirtyRef.current = JSON.stringify(light) !== INIT_LIGHT;
   }, [data, INIT_LIGHT]);
   useEffect(() => {
@@ -365,7 +399,9 @@ export default function CampaignWizard() {
       schedule: data.distributeMode === "distribute" ? JSON.stringify(
         Object.fromEntries(days.map(d => [d, Number(data.schedule[d]) || 0]))
       ) : undefined,
-      photoGuideZip: data.photoZip || undefined,
+      // R2 직접 업로드 키가 있으면 그것을, 없으면 레거시 base64를 사용.
+      photoGuideZipKey: data.photoZipKey || undefined,
+      photoGuideZip: data.photoZipKey ? undefined : (data.photoZip || undefined),
       photoGuideZipName: data.photoZipName || undefined,
     });
   };
@@ -546,14 +582,19 @@ export default function CampaignWizard() {
                     {/* 사진 리뷰 ZIP 업로드 */}
                     <div className="mt-4 border-t border-border/50 pt-4">
                       <Label className="font-semibold">사진 리뷰 ZIP 업로드 <span className="font-normal text-muted-foreground">(선택)</span></Label>
-                      <p className="mb-2 mt-0.5 text-xs text-muted-foreground">리뷰어에게 배정할 사진을 <b className="text-foreground">리뷰어별 폴더</b>로 묶어 ZIP 1개로 올려주세요. 폴더 하나 = 사진 리뷰어 한 명 몫. (.zip · 50MB 이하)</p>
-                      <input ref={zipRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" className="hidden" onChange={onZipFile} />
-                      {data.photoZip ? (
+                      <p className="mb-2 mt-0.5 text-xs text-muted-foreground">리뷰어에게 배정할 사진을 <b className="text-foreground">리뷰어별 폴더</b>로 묶어 ZIP 1개로 올려주세요. 폴더 하나 = 사진 리뷰어 한 명 몫. (.zip · 대용량 지원)</p>
+                      <input ref={zipRef} type="file" accept=".zip,application/zip,application/x-zip-compressed" className="hidden" onChange={onZipFile} disabled={zipUploading} />
+                      {zipUploading ? (
+                        <div className="flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/5 px-3 py-2.5">
+                          <Loader2 className="h-5 w-5 shrink-0 animate-spin text-primary" />
+                          <span className="flex-1 truncate text-sm font-medium text-foreground">업로드 중… 잠시만 기다려 주세요</span>
+                        </div>
+                      ) : (data.photoZipKey || data.photoZip) ? (
                         <div className="flex items-center gap-3 rounded-xl border border-border/70 bg-card px-3 py-2.5">
                           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-base">🗜️</span>
                           <span className="flex-1 truncate text-sm font-medium text-foreground">{data.photoZipName}</span>
                           <button type="button" onClick={() => zipRef.current?.click()} className="shrink-0 text-xs font-semibold text-primary hover:underline">변경</button>
-                          <button type="button" onClick={() => setData(prev => ({ ...prev, photoZip: "", photoZipName: "" }))} className="shrink-0 text-xs font-semibold text-muted-foreground hover:text-destructive">삭제</button>
+                          <button type="button" onClick={() => setData(prev => ({ ...prev, photoZip: "", photoZipName: "", photoZipKey: "" }))} className="shrink-0 text-xs font-semibold text-muted-foreground hover:text-destructive">삭제</button>
                         </div>
                       ) : (
                         <button type="button" onClick={() => zipRef.current?.click()}

@@ -3,6 +3,46 @@ import JSZip from "jszip";
 import { z } from "zod";
 import * as db from "../db";
 import { adminProcedure, businessProcedure, protectedProcedure, publicProcedure, router } from "../_core/trpc";
+import {
+  isStorageConfigured,
+  storageDelete,
+  storageGetBytes,
+  storageGetSignedPutUrl,
+  storagePut,
+} from "../storage";
+
+/** photoGuideZip / assignedPacket 값이 R2 키 참조(`r2:<key>`)면 키를, 아니면 null 반환. */
+function r2KeyOf(value?: string | null): string | null {
+  return value && value.startsWith("r2:") ? value.slice(3) : null;
+}
+
+/** 캠페인의 원본 가이드 ZIP을 Buffer로 로드한다. (R2 키 또는 레거시 base64 모두 지원) */
+async function loadCampaignZipBuffer(photoGuideZip: string): Promise<Buffer> {
+  const key = r2KeyOf(photoGuideZip);
+  if (key) return storageGetBytes(key);
+  const b64 = photoGuideZip.includes(",") ? photoGuideZip.split(",")[1] : photoGuideZip;
+  return Buffer.from(b64, "base64");
+}
+
+/**
+ * 캠페인 완료/삭제 시 R2에 저장된 원본 ZIP·리뷰어 패킷을 모두 삭제한다. (B안 — 비용 최소화)
+ * best-effort: 개별 삭제 실패는 무시한다.
+ */
+async function cleanupCampaignStorage(campaignId: number, photoGuideZip?: string | null) {
+  const keys: string[] = [];
+  const srcKey = r2KeyOf(photoGuideZip);
+  if (srcKey) keys.push(srcKey);
+  try {
+    const parts = await db.listParticipationsByCampaign(campaignId);
+    for (const p of parts) {
+      const pk = r2KeyOf(p.assignedPacket);
+      if (pk) keys.push(pk);
+    }
+  } catch { /* ignore */ }
+  for (const k of keys) {
+    try { await storageDelete(k); } catch (e) { console.error("[R2 cleanup] failed:", k, e); }
+  }
+}
 
 const campaignInput = z.object({
   title: z.string().trim().min(1, "제목을 입력해 주세요.").max(200),
@@ -22,7 +62,18 @@ const campaignInput = z.object({
   schedule: z.string().max(2000).optional(),
   photoGuideZip: z.string().optional(),
   photoGuideZipName: z.string().max(255).optional(),
+  // 신규: 브라우저가 R2로 직접 업로드한 가이드 ZIP의 키. 있으면 base64 대신 `r2:<key>`로 저장.
+  photoGuideZipKey: z.string().max(512).optional(),
 });
+
+/** campaignInput → DB 저장값 정규화: R2 키가 있으면 photoGuideZip을 `r2:<key>`로 치환. */
+function normalizeCampaignInput<T extends { photoGuideZip?: string; photoGuideZipKey?: string }>(input: T) {
+  const { photoGuideZipKey, ...rest } = input;
+  if (photoGuideZipKey) {
+    return { ...rest, photoGuideZip: `r2:${photoGuideZipKey}` };
+  }
+  return rest;
+}
 
 /**
  * 신청 시 차감했던 예치금을 업체에 환불한다. (반려·삭제 시 호출)
@@ -42,6 +93,69 @@ async function refundCampaignIfPaid(
     });
     await db.updateCampaign(campaign.id, { refundedAt: new Date() });
   }
+}
+
+/**
+ * 업로드된 가이드 ZIP을 리뷰어별 최상위 폴더(=리뷰어 1인 몫) 단위로 해체해
+ * 사진 리뷰어(reviewType="photo" 또는 유형구분 없는 구 캠페인)에게 순서대로 배정한다.
+ * 이미 패킷이 배정된 리뷰어는 건너뛰므로 반복 호출(가입 시 자동배정)에 안전하다.
+ * 스토리지가 설정돼 있으면 패킷을 R2에 저장(`r2:<key>`), 아니면 레거시 base64로 저장한다.
+ */
+export async function assignPacketsForCampaign(
+  campaign: NonNullable<Awaited<ReturnType<typeof db.getCampaignById>>>,
+): Promise<{ assigned: number; units: number; participants: number }> {
+  if (!campaign.photoGuideZip) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "업로드된 사진 리뷰 ZIP이 없습니다." });
+  }
+  let zip: JSZip;
+  try {
+    zip = await JSZip.loadAsync(await loadCampaignZipBuffer(campaign.photoGuideZip));
+  } catch {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "ZIP 파일을 열 수 없습니다." });
+  }
+
+  // 최상위 경로 세그먼트별로 그룹핑 → 리뷰어 1인 단위.
+  const units = new Map<string, { path: string; file: JSZip.JSZipObject }[]>();
+  zip.forEach((relPath, file) => {
+    if (file.dir) return;
+    const top = relPath.split("/")[0];
+    if (!units.has(top)) units.set(top, []);
+    units.get(top)!.push({ path: relPath, file });
+  });
+  const unitList = Array.from(units.entries());
+  if (unitList.length === 0) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "ZIP 안에 파일이 없습니다." });
+  }
+
+  const parts = (await db.listParticipationsByCampaign(campaign.id))
+    .filter(p => p.status !== "rejected" && (p.reviewType === "photo" || p.reviewType == null))
+    .sort((a, b) => new Date(a.appliedAt).getTime() - new Date(b.appliedAt).getTime());
+
+  const useR2 = isStorageConfigured();
+  let assigned = 0;
+  for (let i = 0; i < parts.length && i < unitList.length; i++) {
+    if (parts[i].assignedPacket) continue; // 이미 배정됨 → 재호출 안전
+    const [unitName, files] = unitList[i];
+    const out = new JSZip();
+    for (const { path, file } of files) {
+      const rel = path.startsWith(unitName + "/") ? path.slice(unitName.length + 1) : path;
+      out.file(rel || unitName, await file.async("uint8array"));
+    }
+    const assignedName = `${unitName}.zip`;
+    if (useR2) {
+      const bytes = await out.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+      const { key } = await storagePut(`review-packets/${campaign.id}/${unitName}.zip`, bytes, "application/zip");
+      await db.updateParticipation(parts[i].id, { assignedPacket: `r2:${key}`, assignedName });
+    } else {
+      const packetB64 = await out.generateAsync({ type: "base64", compression: "DEFLATE" });
+      await db.updateParticipation(parts[i].id, {
+        assignedPacket: `data:application/zip;base64,${packetB64}`,
+        assignedName,
+      });
+    }
+    assigned++;
+  }
+  return { assigned, units: unitList.length, participants: parts.length };
 }
 
 export const campaignRouter = router({
@@ -97,7 +211,7 @@ export const campaignRouter = router({
     .input(campaignInput)
     .mutation(async ({ ctx, input }) => {
       const created = await db.createCampaign({
-        ...input,
+        ...normalizeCampaignInput(input),
         createdBy: ctx.user.id,
       });
       return created;
@@ -110,7 +224,19 @@ export const campaignRouter = router({
       const { id, ...rest } = input;
       const existing = await db.getCampaignById(id);
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
-      return db.updateCampaign(id, rest);
+      return db.updateCampaign(id, normalizeCampaignInput(rest));
+    }),
+
+  // Business: presigned PUT URL 발급 → 브라우저가 큰 ZIP을 R2로 직접 업로드.
+  // base64-in-DB(64MB packet) 한계를 우회한다. 반환 key를 캠페인 신청 시 photoGuideZipKey로 전달.
+  zipUploadUrl: businessProcedure
+    .input(z.object({ fileName: z.string().trim().min(1).max(255) }))
+    .mutation(async ({ ctx, input }) => {
+      if (!isStorageConfigured()) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "스토리지가 설정되지 않았습니다. 관리자에게 문의해 주세요." });
+      }
+      const safe = input.fileName.replace(/[^a-zA-Z0-9._가-힣-]/g, "_").slice(-120);
+      return storageGetSignedPutUrl(`campaign-zips/${ctx.user.id}/${Date.now()}_${safe}`);
     }),
 
   // Admin: delete campaign (and its participations). 결제된 캠페인이면 예치금 환불.
@@ -120,6 +246,7 @@ export const campaignRouter = router({
       const existing = await db.getCampaignById(input.id);
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
       await refundCampaignIfPaid(existing, ctx.user.id);
+      await cleanupCampaignStorage(existing.id, existing.photoGuideZip); // R2 정리
       await db.deleteCampaign(input.id);
       return { id: input.id };
     }),
@@ -132,6 +259,10 @@ export const campaignRouter = router({
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
       if (input.status === "rejected") {
         await refundCampaignIfPaid(existing, ctx.user.id);
+      }
+      // 캠페인 완료(closed) 또는 반려 시 R2에 저장된 원본 ZIP·패킷 삭제 (B안 — 비용 최소화).
+      if (input.status === "closed" || input.status === "rejected") {
+        await cleanupCampaignStorage(existing.id, existing.photoGuideZip);
       }
       return db.updateCampaign(input.id, { status: input.status });
     }),
@@ -202,7 +333,7 @@ export const campaignRouter = router({
       }
 
       const created = await db.createCampaign({
-        ...input,
+        ...normalizeCampaignInput(input),
         status: "pending",
         createdBy: ctx.user.id,
         paidAmount: total, // 반려·삭제 시 이 금액을 환불
@@ -293,58 +424,7 @@ export const campaignRouter = router({
       if (ctx.user.role !== "admin" && campaign.createdBy !== ctx.user.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
       }
-      if (!campaign.photoGuideZip) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "업로드된 사진 리뷰 ZIP이 없습니다." });
-      }
-
-      // Decode base64 data URL → Buffer → load ZIP.
-      const b64 = campaign.photoGuideZip.includes(",")
-        ? campaign.photoGuideZip.split(",")[1]
-        : campaign.photoGuideZip;
-      let zip: JSZip;
-      try {
-        zip = await JSZip.loadAsync(Buffer.from(b64, "base64"));
-      } catch {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "ZIP 파일을 열 수 없습니다." });
-      }
-
-      // Group non-folder entries by their top-level segment = one unit per reviewer.
-      const units = new Map<string, { path: string; file: JSZip.JSZipObject }[]>();
-      zip.forEach((relPath, file) => {
-        if (file.dir) return;
-        const top = relPath.split("/")[0];
-        if (!units.has(top)) units.set(top, []);
-        units.get(top)!.push({ path: relPath, file });
-      });
-      const unitList = Array.from(units.entries()); // [name, files][]
-      if (unitList.length === 0) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "ZIP 안에 파일이 없습니다." });
-      }
-
-      // 사진 패킷은 'photo'로 배정된 리뷰어에게만 (선착순).
-      // 단, 유형 구분이 없는 구 캠페인(reviewType=null)은 기존대로 전체 배정.
-      const parts = (await db.listParticipationsByCampaign(input.campaignId))
-        .filter(p => p.status !== "rejected" && (p.reviewType === "photo" || p.reviewType == null))
-        .sort((a, b) => new Date(a.appliedAt).getTime() - new Date(b.appliedAt).getTime());
-
-      let assigned = 0;
-      for (let i = 0; i < parts.length && i < unitList.length; i++) {
-        const [unitName, files] = unitList[i];
-        const out = new JSZip();
-        for (const { path, file } of files) {
-          // strip the top folder prefix so the reviewer's zip is clean
-          const rel = path.startsWith(unitName + "/") ? path.slice(unitName.length + 1) : path;
-          out.file(rel || unitName, await file.async("uint8array"));
-        }
-        const packetB64 = await out.generateAsync({ type: "base64", compression: "DEFLATE" });
-        await db.updateParticipation(parts[i].id, {
-          assignedPacket: `data:application/zip;base64,${packetB64}`,
-          assignedName: `${unitName}.zip`,
-        });
-        assigned++;
-      }
-
-      return { assigned, units: unitList.length, participants: parts.length };
+      return assignPacketsForCampaign(campaign);
     }),
 
   // Business: list participations for a campaign they own (with proof photos).

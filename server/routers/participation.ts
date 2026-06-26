@@ -2,6 +2,20 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
 import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
+import { assignPacketsForCampaign } from "./campaign";
+
+/**
+ * 사진 리뷰어가 가입하면 업로드된 가이드 ZIP에서 본인 몫 패킷을 자동 배정한다.
+ * best-effort: ZIP 미업로드/오류 등은 가입 자체를 막지 않는다.
+ */
+async function tryAutoAssignPacket(campaignId: number) {
+  try {
+    const campaign = await db.getCampaignById(campaignId);
+    if (campaign?.photoGuideZip) await assignPacketsForCampaign(campaign);
+  } catch (e) {
+    console.error("[auto-assign packet] skipped:", e);
+  }
+}
 
 /**
  * Workflow status transitions:
@@ -34,7 +48,14 @@ export const participationRouter = router({
       if (!p || p.userId !== ctx.user.id) {
         throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
       }
-      return { name: p.assignedName ?? "guide.zip", dataUrl: p.assignedPacket ?? null };
+      const name = p.assignedName ?? "guide.zip";
+      const packet = p.assignedPacket;
+      // R2 키(`r2:<key>`)면 스토리지 프록시 URL을, 레거시면 base64 데이터 URL을 반환.
+      if (packet && packet.startsWith("r2:")) {
+        const key = packet.slice(3);
+        return { name, url: `/manus-storage/${key}?dl=${encodeURIComponent(name)}`, dataUrl: null };
+      }
+      return { name, url: null, dataUrl: packet ?? null };
     }),
 
   // Reviewer: apply to a campaign.
@@ -72,11 +93,13 @@ export const participationRouter = router({
         if (taken >= campaign.slots) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "모집 인원이 마감되었습니다." });
         }
-        return db.createParticipation({
+        const created = await db.createParticipation({
           campaignId: input.campaignId,
           userId: ctx.user.id,
           status: "applied",
         });
+        await tryAutoAssignPacket(input.campaignId); // 구 캠페인(유형 무관)도 패킷 자동배정
+        return created;
       }
 
       // 현재 유형별 충원 현황 집계 (반려 제외)
@@ -96,12 +119,14 @@ export const participationRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "모집 인원이 마감되었습니다." });
       }
 
-      return db.createParticipation({
+      const created = await db.createParticipation({
         campaignId: input.campaignId,
         userId: ctx.user.id,
         status: "applied",
         reviewType: assigned,
       });
+      if (assigned === "photo") await tryAutoAssignPacket(input.campaignId); // 사진 리뷰어 패킷 자동배정
+      return created;
     }),
 
   // Reviewer: upload search proof → status searched.

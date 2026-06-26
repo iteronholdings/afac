@@ -16,7 +16,8 @@ export function registerStorageProxy(app: Express) {
     }
 
     try {
-      const url = await storageGetSignedUrl(key);
+      const dl = typeof req.query.dl === "string" ? req.query.dl : undefined;
+      const url = await storageGetSignedUrl(key, dl);
       res.set("Cache-Control", "private, max-age=3600");
       res.redirect(307, url);
     } catch (err) {
