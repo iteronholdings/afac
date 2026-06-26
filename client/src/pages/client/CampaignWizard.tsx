@@ -130,7 +130,7 @@ export default function CampaignWizard() {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<WizardData>(INIT);
 
-  // 임시저장 이어쓰기: ?draft=<id> 로 진입하거나, 없으면 가장 최근 임시저장본을 자동으로 불러온다.
+  // ?draft=<id> 로 진입하면 해당 서버 임시저장본을 불러온다.
   const initialDraftId = (() => {
     const id = new URLSearchParams(window.location.search).get("draft");
     return id && /^\d+$/.test(id) ? Number(id) : null;
@@ -139,26 +139,59 @@ export default function CampaignWizard() {
   const draftIdRef = useRef<number | null>(initialDraftId);
   useEffect(() => { draftIdRef.current = draftId; }, [draftId]);
 
-  // URL에 draft가 없으면 내 임시저장 목록(최신순)에서 가장 최근 것을 자동 선택.
-  const myDraftsQuery = trpc.campaign.myDrafts.useQuery(undefined, { enabled: initialDraftId == null });
-  const loadDraftId = initialDraftId ?? myDraftsQuery.data?.[0]?.id ?? null;
+  // 입력값 자동 저장/복원 (셀러별 localStorage). 버튼 없이도 작성 중 내용이 유지된다.
+  const autosaveKey = user?.id ? `arben:campaignDraft:${user.id}` : null;
+  const restoredRef = useRef(false); // 복원은 한 번만 (작성 중 덮어쓰기 방지)
+  const INIT_LIGHT = useMemo(() => {
+    const { photoZip: _z, photoZipName: _zn, ...l } = INIT;
+    return JSON.stringify(l);
+  }, []);
 
   const draftQuery = trpc.campaign.getDraft.useQuery(
-    { id: loadDraftId! },
-    { enabled: loadDraftId != null },
+    { id: initialDraftId! },
+    { enabled: initialDraftId != null },
   );
-  const draftLoadedRef = useRef(false); // 자동 불러오기는 한 번만 (작성 중 덮어쓰기 방지)
   useEffect(() => {
-    const draft = draftQuery.data;
-    if (!draft?.data || draftLoadedRef.current) return;
+    const raw = draftQuery.data?.data;
+    if (!raw || restoredRef.current) return;
     try {
-      const parsed = JSON.parse(draft.data) as Partial<WizardData>;
+      const parsed = JSON.parse(raw) as Partial<WizardData>;
       setData(prev => ({ ...prev, ...parsed }));
-      setDraftId(draft.id);
-      draftLoadedRef.current = true;
+      setDraftId(draftQuery.data!.id);
       toast.success("이전에 임시저장한 내용을 불러왔어요 🐻");
     } catch { /* 손상된 임시저장은 무시 */ }
+    restoredRef.current = true;
   }, [draftQuery.data]);
+
+  // 진입 시: ?draft가 없으면 localStorage에 작성 중이던 내용을 자동 복원.
+  useEffect(() => {
+    if (restoredRef.current || initialDraftId != null || !autosaveKey) return;
+    try {
+      const saved = localStorage.getItem(autosaveKey);
+      if (saved && saved !== INIT_LIGHT) {
+        setData(prev => ({ ...prev, ...(JSON.parse(saved) as Partial<WizardData>) }));
+        toast.success("작성 중이던 내용을 불러왔어요 🐻");
+      }
+    } catch { /* 무시 */ }
+    restoredRef.current = true;
+  }, [autosaveKey, initialDraftId, INIT_LIGHT]);
+
+  // 입력값이 바뀔 때마다 자동 저장 (사진 ZIP은 용량이 커서 제외).
+  useEffect(() => {
+    if (!autosaveKey || !restoredRef.current) return;
+    const { photoZip: _z, photoZipName: _zn, ...light } = data;
+    const s = JSON.stringify(light);
+    try {
+      if (s === INIT_LIGHT) { localStorage.removeItem(autosaveKey); return; }
+      localStorage.setItem(autosaveKey, s);
+    } catch {
+      // 썸네일(base64)이 커서 용량 초과면, 썸네일만 빼고 텍스트라도 저장.
+      try {
+        const { thumbnailUrl: _t, ...noThumb } = light;
+        localStorage.setItem(autosaveKey, JSON.stringify(noThumb));
+      } catch { /* 그래도 실패하면 무시 */ }
+    }
+  }, [data, autosaveKey, INIT_LIGHT]);
 
   const totalReviewers = useMemo(
     () => (Number(data.photoCount) || 0) + (Number(data.textCount) || 0) + (Number(data.starCount) || 0),
@@ -230,7 +263,7 @@ export default function CampaignWizard() {
   const saveDraftMutation = trpc.campaign.saveDraft.useMutation({
     onSuccess: draft => {
       if (draft?.id) setDraftId(draft.id);
-      draftLoadedRef.current = true; // 저장 후에는 자동 불러오기로 덮어쓰지 않음
+      restoredRef.current = true;
       utils.campaign.myDrafts.invalidate();
       toast.success("임시저장되었어요. 나중에 이어서 작성할 수 있어요 🐻");
     },
@@ -259,6 +292,7 @@ export default function CampaignWizard() {
         deleteDraftMutation.mutate({ id: did });
         utils.campaign.myDrafts.invalidate();
       }
+      if (autosaveKey) { try { localStorage.removeItem(autosaveKey); } catch { /* 무시 */ } }
       toast.success("예치금에서 결제되었어요! 관리자 승인 후 캠페인이 시작됩니다 🐻");
       navigate("/client/campaigns");
     },
