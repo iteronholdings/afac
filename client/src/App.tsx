@@ -1,4 +1,5 @@
 import ChatNotifier from "@/components/ChatNotifier";
+import PushPrompt from "@/components/PushPrompt";
 import FloatingChat from "@/components/FloatingChat";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -123,6 +124,7 @@ function App() {
           <Router />
           <FloatingChat />
           <ChatNotifier />
+          <PushPrompt />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

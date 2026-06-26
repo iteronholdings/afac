@@ -9,6 +9,7 @@ import { depositRouter } from "./routers/deposit";
 import { directMessageRouter } from "./routers/directMessage";
 import { messageRouter } from "./routers/message";
 import { participationRouter } from "./routers/participation";
+import { pushRouter } from "./routers/push";
 import { uploadRouter } from "./routers/upload";
 
 export const appRouter = router({
@@ -24,6 +25,7 @@ export const appRouter = router({
   businessMessage: businessMessageRouter,
   admin: adminRouter,
   upload: uploadRouter,
+  push: pushRouter,
 });
 
 export type AppRouter = typeof appRouter;

@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
+import { sendPushToUser } from "../webpush";
 import { protectedProcedure, router } from "../_core/trpc";
 
 /** Resolve (businessId, reviewerId) from the current user + the partner id. */
@@ -68,13 +69,21 @@ export const businessMessageRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { businessId, reviewerId } = await resolvePair(ctx.user.id, ctx.user.role, input.partnerId);
-      return db.createBusinessMessage({
+      const created = await db.createBusinessMessage({
         businessId,
         reviewerId,
         fromUserId: ctx.user.id,
         content: input.content?.trim() || null,
         imageUrl: input.imageUrl || null,
       });
+
+      // 수신자(상대방)에게 웹푸시
+      const preview = input.content?.trim()?.slice(0, 50) || "📷 이미지";
+      const senderName = ctx.user.fullName || ctx.user.name || "상대방";
+      const partner = await db.getUserById(input.partnerId);
+      const url = partner?.role === "business" ? "/client/dashboard" : "/my";
+      void sendPushToUser(input.partnerId, { title: `💬 ${senderName}`, body: preview, url });
+      return created;
     }),
 
   /** Mark a conversation as read. */

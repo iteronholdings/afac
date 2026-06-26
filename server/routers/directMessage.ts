@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
+import { sendPushToUser } from "../webpush";
 import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
 
 export const directMessageRouter = router({
@@ -41,12 +42,23 @@ export const directMessageRouter = router({
       if (ctx.user.role === "admin" && !input.reviewerId) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "reviewerId가 필요합니다." });
       }
-      return db.createDirectMessage({
+      const created = await db.createDirectMessage({
         reviewerId,
         fromUserId: ctx.user.id,
         content: input.content?.trim() || null,
         imageUrl: input.imageUrl || null,
       });
+
+      // 수신자에게 웹푸시 (사이트 닫혀 있어도 알림)
+      const preview = input.content?.trim()?.slice(0, 50) || "📷 이미지";
+      const senderName = ctx.user.fullName || ctx.user.name || "상대방";
+      if (ctx.user.role === "admin") {
+        void sendPushToUser(reviewerId, { title: "💬 운영팀 메시지", body: preview, url: "/my" });
+      } else {
+        const admins = (await db.listAllUsers()).filter(u => u.role === "admin");
+        for (const a of admins) void sendPushToUser(a.id, { title: `💬 ${senderName}`, body: preview, url: "/admin" });
+      }
+      return created;
     }),
 
   /** Mark messages in a conversation as read. */

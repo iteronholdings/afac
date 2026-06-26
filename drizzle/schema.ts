@@ -311,6 +311,22 @@ export type DepositRequest = typeof depositRequests.$inferSelect;
 export type InsertDepositRequest = typeof depositRequests.$inferInsert;
 
 /**
+ * 웹푸시(Web Push) 구독 정보. 사용자가 브라우저에서 알림을 허용하면 저장되며,
+ * 채팅 메시지 도착 시 이 endpoint로 푸시를 보낸다. (사이트를 닫아도 알림)
+ */
+export const pushSubscriptions = mysqlTable("push_subscriptions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  endpoint: varchar("endpoint", { length: 512 }).notNull(),
+  p256dh: varchar("p256dh", { length: 255 }).notNull(),
+  auth: varchar("auth", { length: 255 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;
+export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;
+
+/**
  * 업체 ↔ 리뷰어 1:1 채팅. 대화는 (businessId, reviewerId) 쌍으로 묶인다.
  * 리뷰어가 업체의 캠페인에 참여한 관계에서 문의/소통에 사용.
  */

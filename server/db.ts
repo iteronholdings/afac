@@ -16,9 +16,11 @@ import {
   InsertDirectMessage,
   InsertMessage,
   InsertParticipation,
+  InsertPushSubscription,
   InsertUser,
   messages,
   participations,
+  pushSubscriptions,
   users,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
@@ -144,6 +146,21 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     `);
   } catch (e) {
     console.warn("[Migration] deposit_requests table:", e);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        userId INT NOT NULL,
+        endpoint VARCHAR(512) NOT NULL,
+        p256dh VARCHAR(255) NOT NULL,
+        auth VARCHAR(255) NOT NULL,
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (e) {
+    console.warn("[Migration] push_subscriptions table:", e);
   }
 
   try {
@@ -920,6 +937,28 @@ export async function markDepositRequestPaid(id: number) {
     .update(depositRequests)
     .set({ status: "approved", paidAt: new Date() })
     .where(eq(depositRequests.id, id));
+}
+
+// === Web Push 구독 ===
+
+export async function savePushSubscription(data: InsertPushSubscription) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // 같은 endpoint가 이미 있으면 지우고 새로 저장(사용자 변경/갱신 대응).
+  await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, data.endpoint));
+  await db.insert(pushSubscriptions).values(data);
+}
+
+export async function deletePushSubscriptionByEndpoint(endpoint: string) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint));
+}
+
+export async function listPushSubscriptionsByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
 }
 
 export async function countUnreadMessages(participationId: number, viewerId: number) {
