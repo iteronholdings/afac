@@ -105,6 +105,14 @@ const GUIDES: { title: string; items: { label: string; desc: string; highlight?:
   },
 ];
 
+/** Date → 'YYYY-MM-DD' (로컬 기준). toISOString()은 UTC라 KST에서 하루 밀리므로 사용 금지. */
+function fmtLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function enumerateDates(start: string, end: string): string[] {
   if (!start || !end) return [];
   const out: string[] = [];
@@ -112,16 +120,16 @@ function enumerateDates(start: string, end: string): string[] {
   const e = new Date(end + "T00:00:00");
   if (isNaN(s.getTime()) || isNaN(e.getTime()) || e < s) return [];
   for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-    out.push(d.toISOString().slice(0, 10));
+    out.push(fmtLocal(d));
   }
   return out;
 }
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
+const todayStr = () => fmtLocal(new Date());
 function plusDays(date: string, n: number) {
   const d = new Date(date + "T00:00:00");
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return fmtLocal(d);
 }
 
 export default function CampaignWizard() {
