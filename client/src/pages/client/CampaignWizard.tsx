@@ -376,10 +376,14 @@ export default function CampaignWizard() {
     return true;
   };
 
-  const next = () => { if (validate()) setStep(s => s + 1); };
+  const next = () => {
+    if (zipUploading) { toast.error("사진 ZIP 업로드가 끝날 때까지 기다려 주세요."); return; }
+    if (validate()) setStep(s => s + 1);
+  };
   const prev = () => setStep(s => s - 1);
 
   const submit = () => {
+    if (zipUploading) { toast.error("사진 ZIP 업로드가 끝날 때까지 기다려 주세요."); return; }
     if (totalReviewers < 1) { toast.error("모집 인원을 확인해 주세요."); return; }
     const guideline = data.guidelineType === "A" ? GUIDE_A : data.reviewGuide.trim();
     const description = [
@@ -780,11 +784,13 @@ export default function CampaignWizard() {
 
               <div className="flex items-center gap-2">
                 {step < STEPS.length - 1 ? (
-                  <Button onClick={next} className="gap-1 rounded-full font-bold">다음 <ChevronRight className="h-4 w-4" /></Button>
+                  <Button onClick={next} disabled={zipUploading} className="gap-1 rounded-full font-bold">
+                    {zipUploading ? <><Loader2 className="h-4 w-4 animate-spin" /> 업로드 중…</> : <>다음 <ChevronRight className="h-4 w-4" /></>}
+                  </Button>
                 ) : (
-                  <Button onClick={submit} disabled={requestMutation.isPending || grandTotal > balance} className="gap-1.5 rounded-full font-bold">
-                    {requestMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-                    {grandTotal > balance ? "예치금 부족" : `캠페인 결제하기 (${won(grandTotal)})`}
+                  <Button onClick={submit} disabled={requestMutation.isPending || zipUploading || grandTotal > balance} className="gap-1.5 rounded-full font-bold">
+                    {requestMutation.isPending || zipUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
+                    {zipUploading ? "사진 업로드 중…" : grandTotal > balance ? "예치금 부족" : `캠페인 결제하기 (${won(grandTotal)})`}
                   </Button>
                 )}
               </div>
