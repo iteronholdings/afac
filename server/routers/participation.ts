@@ -22,6 +22,31 @@ async function tryAutoAssignPacket(campaignId: number) {
  * 새 참여자에게 AI 리뷰 원고 초안을 생성·저장한다. (사진·글자 리뷰어 대상, 별점 제외)
  * best-effort. reviewType이 photo면 사진형, 그 외(text·구캠페인 null)는 글자형 톤.
  */
+/**
+ * 배분(distribute) 캠페인의 schedule({날짜:정원})에서, 기존 참여자들의 배정 날짜를
+ * 집계해 아직 정원이 안 찬 가장 이른 날짜를 반환한다. 모두 차면 null.
+ * schedule이 없거나(단일 진행) 비면 null(날짜 미배정).
+ */
+function pickAssignedDate(
+  scheduleJson: string | null | undefined,
+  parts: { status: string; assignedDate?: string | null }[],
+): string | null {
+  if (!scheduleJson) return null;
+  let sched: Record<string, number>;
+  try { sched = JSON.parse(scheduleJson); } catch { return null; }
+  const dates = Object.keys(sched).filter(d => (Number(sched[d]) || 0) > 0).sort();
+  if (dates.length === 0) return null;
+  const counts: Record<string, number> = {};
+  for (const p of parts) {
+    if (p.status === "rejected" || !p.assignedDate) continue;
+    counts[p.assignedDate] = (counts[p.assignedDate] || 0) + 1;
+  }
+  for (const d of dates) {
+    if ((counts[d] || 0) < Number(sched[d])) return d;
+  }
+  return null; // 모든 날짜 마감
+}
+
 async function tryAssignReviewDraft(participationId: number, reviewType: string | null | undefined, campaignId: number) {
   if (reviewType === "star") return; // 별점 리뷰어는 원고 없음
   try {
@@ -97,6 +122,25 @@ export const participationRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: "이미 참여 신청한 캠페인입니다." });
       }
 
+      // 중복 계정(부계정) 차단: 같은 전화번호로 이미 참여 중이면 거절.
+      const me = await db.getUserById(ctx.user.id);
+      if (me?.phone) {
+        const dup = await db.countCampaignParticipantsByPhone(input.campaignId, me.phone, ctx.user.id);
+        if (dup > 0) {
+          throw new TRPCError({ code: "CONFLICT", message: "동일한 전화번호로 이미 참여한 캠페인입니다. (중복 참여 불가)" });
+        }
+      }
+
+      // 배분 캠페인이면 진행 날짜를 자동 배정(선착순, 이른 날짜부터). 단일 진행이면 null.
+      const partsForDate = await db.listParticipationsByCampaign(input.campaignId);
+      const assignedDate = pickAssignedDate(campaign.schedule, partsForDate);
+      if (campaign.schedule && assignedDate === null) {
+        // 배분 캠페인인데 모든 날짜가 마감된 경우.
+        let hasDates = false;
+        try { hasDates = Object.values(JSON.parse(campaign.schedule)).some(v => Number(v) > 0); } catch { /* ignore */ }
+        if (hasDates) throw new TRPCError({ code: "BAD_REQUEST", message: "모든 진행 날짜의 모집이 마감되었습니다." });
+      }
+
       // 리뷰 유형별 정원 (사진 → 글자 → 별점 순으로 선착순 자동배정)
       const caps = {
         photo: campaign.photoCount ?? 0,
@@ -107,7 +151,7 @@ export const participationRouter = router({
 
       // 유형 구분이 없는 (구) 캠페인은 기존 방식대로 총 정원만 체크.
       if (totalCap === 0) {
-        const taken = await db.countActiveParticipations(input.campaignId);
+        const taken = partsForDate.filter(p => p.status !== "rejected").length;
         if (taken >= campaign.slots) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "모집 인원이 마감되었습니다." });
         }
@@ -115,6 +159,7 @@ export const participationRouter = router({
           campaignId: input.campaignId,
           userId: ctx.user.id,
           status: "applied",
+          assignedDate,
         });
         await tryAutoAssignPacket(input.campaignId); // 구 캠페인(유형 무관)도 패킷 자동배정
         if (created) await tryAssignReviewDraft(created.id, null, input.campaignId); // 원고 자동생성
@@ -122,7 +167,7 @@ export const participationRouter = router({
       }
 
       // 현재 유형별 충원 현황 집계 (반려 제외)
-      const parts = await db.listParticipationsByCampaign(input.campaignId);
+      const parts = partsForDate;
       const takenByType = { photo: 0, text: 0, star: 0 };
       for (const p of parts) {
         if (p.status === "rejected") continue;
@@ -143,6 +188,7 @@ export const participationRouter = router({
         userId: ctx.user.id,
         status: "applied",
         reviewType: assigned,
+        assignedDate,
       });
       if (assigned === "photo") await tryAutoAssignPacket(input.campaignId); // 사진 리뷰어 패킷 자동배정
       if (created) await tryAssignReviewDraft(created.id, assigned, input.campaignId); // 원고 자동생성

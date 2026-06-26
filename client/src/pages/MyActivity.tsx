@@ -46,6 +46,13 @@ const REVIEW_TYPE_LABEL: Record<string, string> = {
   star: "⭐ 별점 리뷰",
 };
 
+/** 오늘 날짜 'YYYY-MM-DD' (로컬 기준). 배정일과 비교용. */
+const TODAY_STR = (() => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+})();
+const mmdd = (s: string) => s.slice(5).replace("-", "/");
+
 export default function MyActivity() {
   const { isAuthenticated, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
@@ -209,11 +216,24 @@ export default function MyActivity() {
                           <h3 className="font-semibold leading-snug text-foreground">
                             {c?.title ?? "삭제된 캠페인"}
                           </h3>
-                          {p.reviewType && (
-                            <span className="mt-1 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
-                              {REVIEW_TYPE_LABEL[p.reviewType]} 배정
-                            </span>
-                          )}
+                          <div className="mt-1 flex flex-wrap items-center gap-1">
+                            {p.reviewType && (
+                              <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
+                                {REVIEW_TYPE_LABEL[p.reviewType]} 배정
+                              </span>
+                            )}
+                            {p.assignedDate && (
+                              p.assignedDate === TODAY_STR ? (
+                                <span className="inline-flex items-center gap-0.5 rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
+                                  🔔 오늘 진행 ({mmdd(p.assignedDate)})
+                                </span>
+                              ) : (
+                                <span className="inline-block rounded-full bg-secondary px-2 py-0.5 text-xs font-bold text-secondary-foreground">
+                                  진행일 {mmdd(p.assignedDate)}
+                                </span>
+                              )
+                            )}
+                          </div>
                         </div>
                         <span
                           className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_BADGE[status]}`}

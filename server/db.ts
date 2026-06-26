@@ -79,6 +79,7 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE deposit_requests ADD COLUMN vbankDue VARCHAR(40)`,
     sql`ALTER TABLE deposit_requests ADD COLUMN paidAt TIMESTAMP NULL`,
     sql`ALTER TABLE participations ADD COLUMN reviewDraft TEXT`,
+    sql`ALTER TABLE participations ADD COLUMN assignedDate VARCHAR(20)`,
   ];
   for (const stmt of alterStatements) {
     try {
@@ -549,6 +550,32 @@ export async function countActiveParticipations(campaignId: number) {
     .from(participations)
     .where(eq(participations.campaignId, campaignId));
   return rows.filter(r => r.status !== "rejected").length;
+}
+
+/**
+ * 같은 캠페인에 동일 전화번호(다른 계정 포함)로 이미 참여 중인 인원 수.
+ * 부계정 중복 참여 차단용. 본인(excludeUserId)과 반려 건은 제외, 번호 없으면 0.
+ */
+export async function countCampaignParticipantsByPhone(
+  campaignId: number,
+  phone: string,
+  excludeUserId: number,
+): Promise<number> {
+  const db = await getDb();
+  if (!db || !phone) return 0;
+  const rows = await db
+    .select({ id: participations.id })
+    .from(participations)
+    .innerJoin(users, eq(participations.userId, users.id))
+    .where(
+      and(
+        eq(participations.campaignId, campaignId),
+        ne(participations.status, "rejected"),
+        eq(users.phone, phone),
+        ne(users.id, excludeUserId),
+      ),
+    );
+  return rows.length;
 }
 
 // === Participations ===
