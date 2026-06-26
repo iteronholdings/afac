@@ -27,6 +27,7 @@ import Campaigns from "./pages/Campaigns";
 import Home from "./pages/Home";
 import Landing from "./pages/Landing";
 import MyActivity from "./pages/MyActivity";
+import ReviewerMessages from "./pages/ReviewerMessages";
 import ReviewerOnboarding from "./pages/ReviewerOnboarding";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
@@ -117,6 +118,7 @@ function Router() {
       <Route path="/home" component={() => <ReviewerRoute component={Home} />} />
       <Route path="/campaigns" component={() => <ReviewerRoute component={Campaigns} />} />
       <Route path="/my" component={() => <ReviewerRoute component={MyActivity} />} />
+      <Route path="/messages" component={() => <ReviewerRoute component={ReviewerMessages} />} />
       <Route path="/business" component={() => <ProtectedRoute component={BusinessDashboard} loginPath="/client/login" role="business" />} />
       <Route path="/client" component={() => <Redirect to="/client/login" />} />
       <Route path="/client/login" component={ClientLogin} />

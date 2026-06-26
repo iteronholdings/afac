@@ -9,7 +9,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Building2, ClipboardList, LayoutDashboard, ListChecks, LogOut, Menu, UserRound } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { Building2, ClipboardList, LayoutDashboard, ListChecks, LogOut, Menu, MessageCircle, UserRound } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import BrandLogo from "@/components/BrandLogo";
@@ -34,6 +35,11 @@ export default function SiteHeader() {
   const initial = (user?.fullName || user?.name || "리").charAt(0);
   const navLinks = user?.role === "business" ? BUSINESS_NAV_LINKS : REVIEWER_NAV_LINKS;
 
+  // 메시지 안읽음(운영팀+업체) — 리뷰어 헤더 배지용
+  const { data: opsUnread = 0 } = trpc.directMessage.unreadCount.useQuery(undefined, { enabled: isAuthenticated && isReviewer, refetchInterval: 5000 });
+  const { data: bizUnread = 0 } = trpc.businessMessage.unreadCount.useQuery(undefined, { enabled: isAuthenticated && isReviewer, refetchInterval: 5000 });
+  const msgUnread = (opsUnread || 0) + (bizUnread || 0);
+
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="container flex h-16 items-center justify-between gap-4">
@@ -52,6 +58,14 @@ export default function SiteHeader() {
                 {link.label}
               </Link>
             ))}
+            {isReviewer && (
+              <Link href="/messages" className="relative flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+                <MessageCircle className="h-4 w-4" /> 메시지
+                {msgUnread > 0 && (
+                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{msgUnread > 9 ? "9+" : msgUnread}</span>
+                )}
+              </Link>
+            )}
             {isReviewer && (
               <button
                 onClick={() => setGuideOpen(true)}
@@ -152,6 +166,14 @@ export default function SiteHeader() {
                     <Link href={link.href}>{link.label}</Link>
                   </DropdownMenuItem>
                 ))}
+                {isReviewer && (
+                  <DropdownMenuItem asChild>
+                    <Link href="/messages">
+                      <MessageCircle className="mr-2 h-4 w-4" /> 메시지
+                      {msgUnread > 0 && <span className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{msgUnread > 9 ? "9+" : msgUnread}</span>}
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 {isReviewer && (
                   <DropdownMenuItem onClick={() => setGuideOpen(true)}>
                     <ListChecks className="mr-2 h-4 w-4" /> 절차 안내
