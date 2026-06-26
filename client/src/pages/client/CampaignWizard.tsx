@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
-import { ArrowLeft, Check, ChevronRight, ImageIcon, Loader2, Save, Upload, Wallet } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, ImageIcon, Loader2, Upload, Wallet } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -259,31 +259,26 @@ export default function CampaignWizard() {
     return () => window.removeEventListener("paste", onPaste);
   }, [step]);
 
-  // 임시저장 (생성/수정)
-  const saveDraftMutation = trpc.campaign.saveDraft.useMutation({
-    onSuccess: draft => {
-      if (draft?.id) setDraftId(draft.id);
-      restoredRef.current = true;
-      utils.campaign.myDrafts.invalidate();
-      toast.success("임시저장되었어요. 나중에 이어서 작성할 수 있어요 🐻");
-    },
-    onError: (err: unknown) =>
-      toast.error(err instanceof TRPCClientError ? err.message : "임시저장에 실패했습니다."),
-  });
   const deleteDraftMutation = trpc.campaign.deleteDraft.useMutation();
 
-  const saveDraft = () => {
-    // 사진 리뷰 ZIP(최대 50MB)은 임시저장에서 제외 — 이어서 작성 시 다시 업로드한다.
-    const { photoZip: _zip, photoZipName: _zipName, ...light } = data;
-    saveDraftMutation.mutate({
-      id: draftId ?? undefined,
-      title: data.productFullName.trim() || undefined,
-      data: JSON.stringify(light),
-    });
-  };
+  // 위저드를 떠날 때(다른 메뉴 이동) "자동 저장됐다" 팝업 안내.
+  const dirtyRef = useRef(false);
+  const submittedRef = useRef(false);
+  useEffect(() => {
+    const { photoZip: _z, photoZipName: _zn, ...light } = data;
+    dirtyRef.current = JSON.stringify(light) !== INIT_LIGHT;
+  }, [data, INIT_LIGHT]);
+  useEffect(() => {
+    return () => {
+      if (dirtyRef.current && !submittedRef.current) {
+        toast("작성 중인 내용은 자동 저장됐어요. 다음에 이어서 작성할 수 있어요 🐻", { icon: "💾", duration: 4000 });
+      }
+    };
+  }, []);
 
   const requestMutation = trpc.campaign.request.useMutation({
     onSuccess: () => {
+      submittedRef.current = true; // 제출 완료 — 떠날 때 자동저장 안내 띄우지 않음
       utils.campaign.myBusiness.invalidate();
       utils.auth.me.invalidate();  // 예치금 차감 반영
       // 결제까지 마쳤으면 임시저장본은 정리.
@@ -733,16 +728,6 @@ export default function CampaignWizard() {
               ) : <div />}
 
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  onClick={saveDraft}
-                  disabled={saveDraftMutation.isPending}
-                  className="gap-1.5 rounded-full bg-card"
-                >
-                  {saveDraftMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  임시저장
-                </Button>
-
                 {step < STEPS.length - 1 ? (
                   <Button onClick={next} className="gap-1 rounded-full font-bold">다음 <ChevronRight className="h-4 w-4" /></Button>
                 ) : (
