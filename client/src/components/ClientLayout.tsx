@@ -11,7 +11,6 @@ import {
   Rocket,
   Search,
   Sparkles,
-  Store,
   TrendingUp,
   User,
   Wallet,
@@ -279,7 +278,13 @@ export default function ClientLayout({
             </div>
             {actions && <div className="flex items-center gap-2">{actions}</div>}
           </div>
-          <Store className="hidden h-5 w-5 text-muted-foreground/40 sm:block" />
+          <Link
+            href="/client/dashboard"
+            title="홈"
+            className="hidden shrink-0 rounded-xl border border-border/70 bg-card p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground sm:block"
+          >
+            <Home className="h-5 w-5" />
+          </Link>
         </header>
 
         <main className="flex-1 p-4 pb-24 sm:p-6 sm:pb-24">{children}</main>

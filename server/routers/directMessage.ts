@@ -81,6 +81,7 @@ export const directMessageRouter = router({
           reviewerId: m.reviewerId,
           reviewerName: reviewer?.fullName || reviewer?.name || "알 수 없음",
           reviewerLoginId: reviewer?.loginId ?? "",
+          reviewerRole: reviewer?.role ?? "user",
           latestContent: m.content,
           latestAt: m.createdAt,
           unread,

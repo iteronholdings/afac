@@ -10,6 +10,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import AdminBusinesses from "./pages/admin/AdminBusinesses";
 import AdminCampaigns from "./pages/admin/AdminCampaigns";
 import AdminConsulting from "./pages/admin/AdminConsulting";
+import AdminMessages from "./pages/admin/AdminMessages";
 import AdminMembers from "./pages/admin/AdminMembers";
 import AdminParticipations from "./pages/admin/AdminParticipations";
 import AdminSettlement from "./pages/admin/AdminSettlement";
@@ -126,6 +127,7 @@ function Router() {
       <Route path="/admin" component={() => <ProtectedRoute component={AdminCampaigns} role="admin" />} />
       <Route path="/admin/participations" component={() => <ProtectedRoute component={AdminParticipations} role="admin" />} />
       <Route path="/admin/settlement" component={() => <ProtectedRoute component={AdminSettlement} role="admin" />} />
+      <Route path="/admin/messages" component={() => <ProtectedRoute component={AdminMessages} role="admin" />} />
       <Route path="/admin/consulting" component={() => <ProtectedRoute component={AdminConsulting} role="admin" />} />
       <Route path="/admin/businesses" component={() => <ProtectedRoute component={AdminBusinesses} role="admin" />} />
       <Route path="/admin/members" component={() => <ProtectedRoute component={AdminMembers} role="admin" />} />
