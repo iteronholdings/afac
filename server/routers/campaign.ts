@@ -97,8 +97,9 @@ async function refundCampaignIfPaid(
 }
 
 /**
- * 업로드된 가이드 ZIP을 리뷰어별 최상위 폴더(=리뷰어 1인 몫) 단위로 해체해
- * 사진 리뷰어(reviewType="photo" 또는 유형구분 없는 구 캠페인)에게 순서대로 배정한다.
+ * 업로드된 통합 ZIP을 해체해 사진 리뷰어에게 1인 1패킷씩 순서대로 배정한다.
+ *  - 통합 ZIP 안에 '리뷰어별 .zip'이 들어있으면 그 내부 zip을 그대로 배정(권장).
+ *  - 없으면 최상위 폴더별로 묶어 re-zip해 배정.
  * 이미 패킷이 배정된 리뷰어는 건너뛰므로 반복 호출(가입 시 자동배정)에 안전하다.
  * 스토리지가 설정돼 있으면 패킷을 R2에 저장(`r2:<key>`), 아니면 레거시 base64로 저장한다.
  */
@@ -115,17 +116,51 @@ export async function assignPacketsForCampaign(
     throw new TRPCError({ code: "BAD_REQUEST", message: "ZIP 파일을 열 수 없습니다." });
   }
 
-  // 최상위 경로 세그먼트별로 그룹핑 → 리뷰어 1인 단위.
-  const units = new Map<string, { path: string; file: JSZip.JSZipObject }[]>();
+  // 배정 단위 구성 — 두 가지 모드:
+  //  (A) 통합 ZIP 안에 '리뷰어별 .zip'들이 들어있으면 → 각 내부 zip을 그대로 1명에게(권장).
+  //  (B) 내부 zip이 없으면(폴더 구조) → 최상위 폴더별로 묶어 re-zip(기존 방식).
+  type Unit = { name: string; bytes: () => Promise<Uint8Array> };
+  let units: Unit[] = [];
+
+  const innerZips: { path: string; file: JSZip.JSZipObject }[] = [];
   zip.forEach((relPath, file) => {
-    if (file.dir) return;
-    const top = relPath.split("/")[0];
-    if (!units.has(top)) units.set(top, []);
-    units.get(top)!.push({ path: relPath, file });
+    if (!file.dir && /\.zip$/i.test(relPath)) innerZips.push({ path: relPath, file });
   });
-  const unitList = Array.from(units.entries());
-  if (unitList.length === 0) {
-    throw new TRPCError({ code: "BAD_REQUEST", message: "ZIP 안에 파일이 없습니다." });
+
+  if (innerZips.length > 0) {
+    // (A) 셀러가 미리 묶어둔 내부 zip을 그대로 1명씩 배정.
+    units = innerZips
+      .sort((a, b) => a.path.localeCompare(b.path, "ko"))
+      .map(z => ({
+        name: z.path.split("/").pop() || "packet.zip",
+        bytes: () => z.file.async("uint8array"),
+      }));
+  } else {
+    // (B) 폴더별로 묶어 re-zip.
+    const folders = new Map<string, { path: string; file: JSZip.JSZipObject }[]>();
+    zip.forEach((relPath, file) => {
+      if (file.dir) return;
+      const top = relPath.split("/")[0];
+      if (!folders.has(top)) folders.set(top, []);
+      folders.get(top)!.push({ path: relPath, file });
+    });
+    units = Array.from(folders.entries())
+      .sort((a, b) => a[0].localeCompare(b[0], "ko"))
+      .map(([folderName, files]) => ({
+        name: `${folderName}.zip`,
+        bytes: async () => {
+          const out = new JSZip();
+          for (const { path, file } of files) {
+            const rel = path.startsWith(folderName + "/") ? path.slice(folderName.length + 1) : path;
+            out.file(rel || folderName, await file.async("uint8array"));
+          }
+          return out.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+        },
+      }));
+  }
+
+  if (units.length === 0) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "ZIP 안에 배정할 파일이 없습니다." });
   }
 
   const parts = (await db.listParticipationsByCampaign(campaign.id))
@@ -134,25 +169,20 @@ export async function assignPacketsForCampaign(
 
   const useR2 = isStorageConfigured();
   let assigned = 0;
-  for (let i = 0; i < parts.length && i < unitList.length; i++) {
+  for (let i = 0; i < parts.length && i < units.length; i++) {
     if (parts[i].assignedPacket) continue; // 이미 배정됨 → 재호출 안전
-    const [unitName, files] = unitList[i];
-    const out = new JSZip();
-    for (const { path, file } of files) {
-      const rel = path.startsWith(unitName + "/") ? path.slice(unitName.length + 1) : path;
-      out.file(rel || unitName, await file.async("uint8array"));
-    }
-    const assignedName = `${unitName}.zip`;
+    const unit = units[i];
+    const bytes = await unit.bytes();
+    const assignedName = unit.name;
     // 패킷 배정 시 리뷰 원고가 없으면 함께 생성(사진형). join 누락분 backfill.
     const draftPatch = parts[i].reviewDraft
       ? {}
       : { reviewDraft: generateReviewDraft({ type: "photo", title: campaign.title, keyword: campaign.keyword }) };
     if (useR2) {
-      const bytes = await out.generateAsync({ type: "uint8array", compression: "DEFLATE" });
-      const { key } = await storagePut(`review-packets/${campaign.id}/${unitName}.zip`, bytes, "application/zip");
+      const { key } = await storagePut(`review-packets/${campaign.id}/${assignedName}`, bytes, "application/zip");
       await db.updateParticipation(parts[i].id, { assignedPacket: `r2:${key}`, assignedName, ...draftPatch });
     } else {
-      const packetB64 = await out.generateAsync({ type: "base64", compression: "DEFLATE" });
+      const packetB64 = Buffer.from(bytes).toString("base64");
       await db.updateParticipation(parts[i].id, {
         assignedPacket: `data:application/zip;base64,${packetB64}`,
         assignedName,
@@ -161,7 +191,7 @@ export async function assignPacketsForCampaign(
     }
     assigned++;
   }
-  return { assigned, units: unitList.length, participants: parts.length };
+  return { assigned, units: units.length, participants: parts.length };
 }
 
 export const campaignRouter = router({
