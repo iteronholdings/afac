@@ -26,6 +26,8 @@ import CampaignWizard from "./pages/client/CampaignWizard";
 import Campaigns from "./pages/Campaigns";
 import Home from "./pages/Home";
 import Landing from "./pages/Landing";
+import Privacy from "./pages/Privacy";
+import Refund from "./pages/Refund";
 import MyActivity from "./pages/MyActivity";
 import ReviewerMessages from "./pages/ReviewerMessages";
 import ReviewerOnboarding from "./pages/ReviewerOnboarding";
@@ -114,6 +116,8 @@ function Router() {
       <Route path="/afreviewer/login" component={Login} />
       <Route path="/afreviewer/signup" component={Signup} />
       <Route path="/" component={Landing} />
+      <Route path="/privacy" component={Privacy} />
+      <Route path="/refund" component={Refund} />
       <Route path="/onboarding" component={() => <ProtectedRoute component={ReviewerOnboarding} />} />
       <Route path="/home" component={() => <ReviewerRoute component={Home} />} />
       <Route path="/campaigns" component={() => <ReviewerRoute component={Campaigns} />} />

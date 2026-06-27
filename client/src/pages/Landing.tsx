@@ -287,6 +287,11 @@ export default function Landing() {
               <ShieldCheck className="h-3.5 w-3.5 text-primary" /> 어뷰징 0% · 평생 A/S · 세금계산서 발행
             </p>
           </div>
+          <nav className="flex items-center gap-4 text-sm font-medium">
+            <Link href="/privacy" className="text-muted-foreground transition-colors hover:text-foreground">개인정보처리방침</Link>
+            <span className="text-border">|</span>
+            <Link href="/refund" className="text-muted-foreground transition-colors hover:text-foreground">환불규정</Link>
+          </nav>
         </div>
         <div className="border-t border-border/50 py-3 text-center text-xs text-muted-foreground">
           © {new Date().getFullYear()} ARVEN FACTORY. All rights reserved.
