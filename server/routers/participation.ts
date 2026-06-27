@@ -85,8 +85,8 @@ export const participationRouter = router({
         // Strip the heavy assigned-packet base64; expose a flag instead.
         const { assignedPacket, ...rest } = p;
         const campaign = await db.getCampaignById(p.campaignId);
-        // Drop the business's full guide ZIP from the reviewer payload.
-        const camp = campaign ? (({ photoGuideZip, ...c }) => c)(campaign) : campaign;
+        // Drop the business's full guide ZIP from the reviewer payload; expose 존재 플래그만.
+        const camp = campaign ? (({ photoGuideZip, ...c }) => ({ ...c, hasGuideZip: !!photoGuideZip }))(campaign) : campaign;
         return { ...rest, hasPacket: !!assignedPacket, campaign: camp };
       })
     );

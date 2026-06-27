@@ -154,7 +154,8 @@ export async function assignPacketsForCampaign(
             const rel = path.startsWith(folderName + "/") ? path.slice(folderName.length + 1) : path;
             out.file(rel || folderName, await file.async("uint8array"));
           }
-          return out.generateAsync({ type: "uint8array", compression: "DEFLATE" });
+          // 사진(jpg/png)은 이미 압축돼 있어 DEFLATE는 느리기만 함 → STORE(무압축)로 빠르게 패키징.
+          return out.generateAsync({ type: "uint8array", compression: "STORE" });
         },
       }));
   }

@@ -27,6 +27,7 @@ import {
   Copy,
   FolderArchive,
   ImageIcon,
+  Loader2,
   MessageCircle,
   PackageCheck,
   PencilLine,
@@ -60,10 +61,10 @@ export default function MyActivity() {
   const { data: parts, isLoading, isError, refetch } = trpc.participation.mine.useQuery(undefined, {
     enabled: isAuthenticated,
     refetchOnWindowFocus: true,
-    // 사진 패킷이 백그라운드 배정되는 동안만 8초 폴링 → 준비되면 버튼이 자동으로 뜸.
+    // 사진 패킷이 백그라운드 배정되는 동안만 4초 폴링 → 준비되면 버튼이 자동으로 뜸.
     refetchInterval: query => {
-      const d = query.state.data as { reviewType?: string | null; hasPacket?: boolean }[] | undefined;
-      return d?.some(p => p.reviewType === "photo" && !p.hasPacket) ? 8000 : false;
+      const d = query.state.data as { reviewType?: string | null; hasPacket?: boolean; campaign?: { hasGuideZip?: boolean } | null }[] | undefined;
+      return d?.some(p => p.reviewType === "photo" && !p.hasPacket && p.campaign?.hasGuideZip) ? 4000 : false;
     },
   });
 
@@ -379,7 +380,7 @@ export default function MyActivity() {
                     )}
 
                     {/* 배정된 사진 ZIP 다운로드 (할당된 경우) */}
-                    {p.hasPacket && (
+                    {p.hasPacket ? (
                       <Button
                         size="sm"
                         variant="outline"
@@ -388,7 +389,12 @@ export default function MyActivity() {
                       >
                         <FolderArchive className="mr-1.5 h-4 w-4" /> 배정된 사진 받기
                       </Button>
-                    )}
+                    ) : p.reviewType === "photo" && c?.hasGuideZip ? (
+                      // 패킷이 백그라운드 배정 중 — 준비되면 자동으로 버튼으로 바뀜(4초 폴링).
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/40 px-2.5 py-1.5 text-xs font-medium text-muted-foreground">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" /> 배정된 사진 준비 중…
+                      </span>
+                    ) : null}
 
                     {/* Show submitted proofs */}
                     <div className="ml-auto flex gap-2">
