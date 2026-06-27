@@ -1,6 +1,6 @@
 # 아르벤팩토리 / TaskHarbor — 재사용 홈페이지 템플릿 명세서
 
-> 이 문서 하나로 **다른 사이트에 그대로 복제·재사용**할 수 있도록, 기능·연동서비스·잡기능을 **하나도 빠짐없이** 정리한 인벤토리다. (작성일 기준 main `8f072b4`)
+> 이 문서 하나로 **다른 사이트에 그대로 복제·재사용**할 수 있도록, 기능·연동서비스·잡기능을 **하나도 빠짐없이** 정리한 인벤토리다. (2026-06 업그레이드 반영 — R2 대용량 업로드·백그라운드 잡·노-LLM 텍스트생성·날짜배분 등. §2-bis 참고)
 
 ---
 
@@ -31,7 +31,50 @@
 - **지연 마이그레이션**: `server/db.ts`의 `getDb()`가 최초 호출 시 `runMigrations` 1회 실행 — `ALTER TABLE ... ADD COLUMN`(중복은 `ER_DUP_FIELDNAME` 무시) + `CREATE TABLE IF NOT EXISTS` + ENUM `MODIFY`. **마이그레이션 파일 없이** 코드만 고치고 서버 재시작하면 스키마가 따라온다.
 - **역할 게이트**: `_core/trpc.ts`의 4단계 procedure로 권한 분리. `user`(리뷰어) / `business`(업체) / `admin`.
 - **세션**: 쿠키 기반 JWT, `_core/context.ts`가 매 요청 `ctx.user` 주입.
-- **이미지/파일 저장**: base64 data URL을 longtext 컬럼에 직접 저장(썸네일·인증샷·ZIP). Express body limit `100mb`. 대용량은 S3 storageProxy로 전환 가능.
+- **이미지/파일 저장**: base64 data URL을 longtext 컬럼에 직접 저장(썸네일·인증샷). Express body limit `100mb`. **단, base64-in-DB는 MySQL `max_allowed_packet`(기본 64MB) 때문에 ~40MB가 한계** → 대용량은 §2-bis R2 패턴 사용.
+
+---
+
+## 2-bis. ★ 재사용 패턴 (2026-06 업그레이드 — 검증 완료)
+
+> 이번 세션에서 실전 검증된 고가치 패턴들. 새 사이트에서 그대로 가져다 쓰면 된다.
+
+### (a) 대용량 파일 = Cloudflare R2 직접 업로드 (base64-DB 한계 우회)
+`server/storage.ts` + `_core/storageProxy.ts`. 흐름:
+1. **브라우저 → R2 presigned PUT 직접 업로드**: 클라가 `campaign.zipUploadUrl`(presign 발급, businessProcedure)로 URL 받아 `fetch(url,{method:"PUT",body:file})`. tRPC JSON body(33% 팽창)·DB packet 한계를 우회 → **GB급 가능**. ContentType 미서명으로 헤더 불일치 회피.
+2. **저장 참조**: 컬럼엔 `r2:<key>` 문자열만. (base64 레거시도 계속 지원 — `r2KeyOf()`로 분기)
+3. **다운로드**: `/manus-storage/<key>?dl=<파일명>` 프록시가 307→서명 URL 리다이렉트(`storageGetSignedUrl`, ResponseContentDisposition로 파일명 강제). GET은 CORS 불필요(top-level navigation).
+4. **CORS**(브라우저 PUT용): R2 버킷에 AllowedOrigins=[사이트도메인, localhost], Methods=[GET,PUT,HEAD], Headers=[*]. 안 하면 PUT preflight 실패.
+5. **완료 시 삭제(비용 최소화 B안)**: 캠페인 closed/반려/삭제 시 원본+패킷 R2 키 삭제(`cleanupCampaignStorage`).
+6. **폴백**: presign 실패(스토리지 미설정)면 ≤45MB는 base64로 자동 폴백 → 배포 시점 무관하게 안 깨짐.
+- 헬퍼: `storagePut / storageGetSignedPutUrl / storageGetBytes / storageDelete / storageGetSignedUrl(downloadName) / isStorageConfigured`.
+
+### (b) 무거운 작업은 백그라운드 + 키별 직렬화 (가입 즉시 응답)
+수십초~수분 걸리는 작업(대용량 ZIP 분해·R2 업로드)을 요청에서 떼어내 **응답 후 실행**(Railway 상주 Node라 프라미스 계속 돎). `participation.ts`의 `scheduleAssignPacket`: `Map<key, Promise>`로 **키별 체인** → 동시 호출 시 겹침 0(중복처리·경쟁 방지), 새 호출은 직전 작업 뒤 한 번 더 → 누락 0. 클라는 §(f) 조건부 폴링으로 완료 감지.
+
+### (c) 타임존 함정 — `toISOString()` 금지, 로컬 포맷 써라
+`new Date("2026-07-03").toISOString().slice(0,10)`은 **UTC라 KST에서 하루 밀린다**(07-02). 날짜 'YYYY-MM-DD' 만들 땐 항상 로컬 기반 `fmtLocal(d)`(getFullYear/Month/Date) 사용. 서버에서 KST 판단은 `new Date(Date.now()+9*3600*1000)` 후 `getUTCHours()/toISOString()`.
+
+### (d) 목록 페이로드 경량화 — 무거운 컬럼 제거
+list 엔드포인트는 `{...row}` 그대로 내리지 말 것. base64 ZIP/큰 blob이 섞이면 **응답이 수십 MB**(실측 admin 목록 70MB→로딩 지연). `const {photoGuideZip, ...rest}=row; return {...rest, hasPhotoGuideZip:!!photoGuideZip}` 처럼 **존재 플래그만** 노출. (myBusiness/listAll/mine 전부 이 방식)
+
+### (e) 노-LLM 텍스트 생성 (페르소나 기반, 비용 0)
+`server/reviewDraft.ts`: 14개 페르소나(말투)별 문장 풀에서 무작위 조합+어순 셔플 → 매번 다른 자연스러운 한국어 생성. API 키·비용 0. "다양한 말투의 리뷰/문구 자동생성" 같은 데 그대로 재사용. (진짜 LLM 원하면 `_core/llm.ts`에 키 연결)
+
+### (f) 조건부 react-query 폴링 — 백그라운드 완료만 감지
+`refetchInterval: query => query.state.data?.some(대기조건) ? 8000 : false` — 백그라운드 작업 대기 중에만 폴링하고 끝나면 멈춤. (사진 패킷 준비되면 버튼 자동 노출에 사용)
+
+### (g) 업로드 진행 중 제출 차단
+대용량 비동기 업로드(presigned PUT) 중 사용자가 다음/제출로 넘어가면 키 누락 발생 → `uploading` 상태로 **다음·제출 버튼 비활성** + 가드. (안 하면 R2엔 올라갔는데 레코드엔 안 붙는 고아 발생)
+
+### (h) 중복 계정(부계정) 차단 = 전화번호 조인
+`countCampaignParticipantsByPhone(campaignId, phone, excludeUserId)` — participations⋈users 조인으로 같은 번호 다른 계정 참여를 차단. (번호 없으면 통과)
+
+### (i) 날짜 배분 스케줄 + 당일 노출
+`schedule` JSON `{날짜:정원}`에서 가입 시 이른 날짜부터 선착순 `assignedDate` 자동배정(`pickAssignedDate`), 당일이면 "🔔 오늘 진행" 배지. 당일 마감 컷오프(예: 오후 2시)는 클라 검증 + 서버 KST 가드.
+
+### (j) 통합 ZIP 분배 2모드
+통합 ZIP 안에 **리뷰어별 .zip이 있으면 그 내부 zip을 그대로** 1명씩(재압축X), 없으면 **최상위 폴더별 re-zip**(`assignPacketsForCampaign`).
 
 ---
 
@@ -71,7 +114,7 @@ client/src/
 | `users` | 회원(role: user/business/admin), 비번해시, 은행계좌, memberCode(A-001…), depositBalance, reviewerAgreedAt |
 | `campaigns` | 캠페인(상품/키워드/슬롯, photoCount·textCount·starCount, 일정·schedule, photoGuideZip, status 6종) |
 | `campaign_drafts` | 캠페인 신청 임시저장(서버측, JSON data) |
-| `participations` | 리뷰어 참여(상태머신 applied→…→paid, 인증샷 3종, reviewType, assignedPacket) |
+| `participations` | 리뷰어 참여(상태머신 applied→…→paid, 인증샷 3종, reviewType, assignedPacket/Name, **reviewDraft**(AI원고), **assignedDate**(날짜배분)) |
 | `messages` | 참여 단위 메시지(리뷰어↔운영) |
 | `direct_messages` | 리뷰어↔관리자 DM(FloatingChat) |
 | `business_messages` | 업체↔리뷰어 DM(BusinessChatDialog) |
@@ -83,7 +126,8 @@ client/src/
 
 ## 6. API 표면 (tRPC, `appRouter`)
 - **auth**: me, signup, login, checkLoginId, agreeReviewerTerms, logout
-- **campaign**: listPreview/listOpen/get/listAll, create/update/remove/setStatus(관리자), fetchProductMeta, request(예치금 차감 신청), myBusiness, **saveDraft/myDrafts/getDraft/deleteDraft**, assignZipPackets(ZIP→리뷰어 배정), campaignParticipants
+- **campaign**: listPreview/listOpen/get/listAll, create/update/remove/setStatus(관리자), fetchProductMeta, request(예치금 차감 신청·당일마감 가드), myBusiness, **saveDraft/myDrafts/getDraft/deleteDraft**, **zipUploadUrl**(R2 presigned PUT 발급), assignZipPackets(ZIP→리뷰어 배정), campaignParticipants
+- **push**: publicKey/subscribe/unsubscribe (웹 푸시 VAPID)
 - **participation**: mine, myPacket, join(★사진→글자→별점 선착순 자동배정), submitSearch/Purchase/ReviewProof, listAll/setStatus(관리자)
 - **deposit**: me, config(vbank 활성여부), requestCharge(수동), initVbankCharge/syncVbank(가상계좌), myRequests
 - **admin**: listMembers, setRole/setMemberCode/setMemberPassword, listBusinesses, adjustDeposit, depositLog, listDepositRequests/processDepositRequest(충전요청 승인), settlementList
@@ -110,7 +154,7 @@ client/src/
 | **Cloudflare** | (대시보드) | DNS + 무료 SSL + 루트→www 리다이렉트 규칙(apex CNAME 플래트닝) | 네임서버 이전 |
 | **Railway** | push→자동배포 | 호스팅/도메인/볼륨(MySQL). `PORT` 주입 | GitHub 연동 |
 | **OAuth 서버** | `_core/oauth.ts` | 외부 OAuth 로그인 | `OAUTH_SERVER_URL`, `OWNER_OPEN_ID` |
-| **S3 호환 스토리지** | `_core/storageProxy.ts` (`/manus-storage/*`) | 대용량 파일 프록시/서빙 | S3_* env |
+| **Cloudflare R2(S3 호환)** | `server/storage.ts`, `_core/storageProxy.ts`(`/manus-storage/*`) | 대용량 파일 = 브라우저 presigned PUT 직접 업로드 + 서명URL 프록시 서빙 + 완료 시 삭제(§2-bis a). base64-DB 한계 우회 | `S3_ENDPOINT/REGION/ACCESS_KEY_ID/SECRET_ACCESS_KEY/BUCKET` + 버킷 CORS |
 
 ### 8-B. 플랫폼 스캐폴드 (`_core/`, 바로 쓸 수 있게 배선된 잡기능들)
 > Manus WebDev 템플릿 기반의 **선배선 연동 헬퍼**. 키만 꽂으면 동작. 새 사이트에서 안 쓰면 무시하면 되고, 필요하면 즉시 활용.
@@ -127,8 +171,11 @@ client/src/
 ### 8-C. 프로덕트 내장 "잡기능"
 - **임시저장 2종**: ① localStorage 자동저장/복원(버튼 없음, 이탈 시 안내 팝업) ② 서버 draft `?draft=id` 이어쓰기(크로스기기, ClientHome 목록)
 - **썸네일 Ctrl+V 붙여넣기** 업로드 + 파일 업로드
-- **ZIP 패킷 분배**: 업체가 올린 사진 ZIP을 리뷰어별 폴더로 해체해 photo 리뷰어에게 자동 배정(`assignZipPackets`, jszip)
-- **리뷰어 타입 선착순 자동배정**(사진→글자→별점)
+- **ZIP 패킷 분배**: 통합 ZIP을 리뷰어별로 해체해 photo 리뷰어에게 자동 배정 — 내부 .zip 그대로/폴더 re-zip 2모드(§2-bis j), 가입 시 **백그라운드 배정**(§2-bis b)
+- **AI 리뷰 원고 자동생성**: 14말투 페르소나, 노-LLM, 사진/글자 리뷰어에 가입 시 자동배정(§2-bis e)
+- **리뷰어 타입 선착순 자동배정**(사진→글자→별점) + **날짜 배분 자동배정**(§2-bis i)
+- **중복 계정 차단**(전화번호, §2-bis h) · **당일 진행 마감 컷오프**(KST 가드)
+- **웹 푸시 알림**: VAPID + service worker(`client/public/sw.js`) + Push API, 채팅/이벤트 시 푸시(`server/webpush.ts`, `routers/push.ts`, `lib/push.ts`, `ChatNotifier`/`PushPrompt`)
 - **예치금 원장**: 충전/차감/결제/환불 내역, 잔액, 충전요청+세금계산서 발급정보+관리자 승인
 - **회원코드 자동발급**(A-001…), **관리자 비밀번호 재설정**
 - **채팅 3종**: 참여단위·리뷰어↔관리자·업체↔리뷰어 (5초 폴링, 이미지 첨부+압축)
@@ -152,7 +199,8 @@ PORTONE_STORE_ID=...
 PORTONE_CHANNEL_KEY=...
 PORTONE_API_SECRET=...
 PORTONE_WEBHOOK_SECRET=...
-# S3 스토리지(선택): S3_ENDPOINT/REGION/ACCESS_KEY_ID/SECRET/BUCKET/PUBLIC_URL
+# R2/S3 스토리지(선택, 대용량 업로드): S3_ENDPOINT/REGION/ACCESS_KEY_ID/SECRET_ACCESS_KEY/BUCKET (+버킷 CORS 설정)
+# 웹 푸시(선택): VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT
 ```
 > `.env`는 **절대 커밋 금지**(gitignore됨).
 
