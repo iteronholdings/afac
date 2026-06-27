@@ -110,59 +110,48 @@ async function rezipFiles(files: { rel: string; file: JSZip.JSZipObject }[], str
 
 /**
  * 업로드된 압축파일을 **타고 들어가며** '리뷰어 1인 단위'를 자동 판별한다.
- * 셀러가 어떻게 묶든 착오 없게:
- *  1) 공통 래퍼 폴더는 자동으로 벗긴다(예: `2차발송본/리뷰어1/..` → 리뷰어1, 리뷰어2 …를 단위로).
- *  2) 안에 리뷰어별 .zip이 여러 개면 각 zip을 그대로 1명씩.
- *  3) 폴더가 여러/하나면 각 폴더를 re-zip해 1명씩.
- *  4) 래퍼 zip 한 겹(단일 zip만 있음)이면 그 안으로 재귀.
- *  5) 폴더·zip 없이 사진만 흩어져 있으면(분리 불가) 전부 1명에게.
+ * 셀러가 어떻게 묶든(래퍼/배치 폴더 몇 겹이든, 최상위 폴더가 여러 개든) 착오 없게:
+ *  - 핵심: 사진을 **'바로 위 폴더(=사진이 실제로 든 폴더)'** 단위로 그룹 → 각 폴더 = 1명.
+ *    (예: `2차발송본/리뷰어1/..`, `참외1차/리뷰어99/..` 처럼 깊이·배치가 섞여도 각 리뷰어 폴더로 정확히 분리)
+ *  - 리뷰어별 .zip이 여러 개면 각 zip 그대로 1명씩.
+ *  - 래퍼 zip 한 겹(단일 zip만)이면 그 안으로 재귀.
+ *  - 폴더 없이 사진만 흩어져 있으면(분리 불가) 전부 1명에게.
  */
 async function analyzeZipUnits(zip: JSZip, depth = 0): Promise<PacketUnit[]> {
   const entries: { path: string; file: JSZip.JSZipObject }[] = [];
   zip.forEach((p, f) => { if (!f.dir) entries.push({ path: p, file: f }); });
   if (entries.length === 0) return [];
 
-  // 1) 공통 래퍼 폴더 벗기기: 모든 파일이 같은 최상위 폴더 아래면 그 폴더는 의미없는 래퍼.
-  let rels = entries.map(e => e.path);
-  while (true) {
-    const slash = rels[0].indexOf("/");
-    if (slash <= 0) break;
-    const seg = rels[0].slice(0, slash);
-    if (!rels.every(p => p.startsWith(seg + "/"))) break;
-    rels = rels.map(p => p.slice(seg.length + 1));
-  }
-  const withRel = entries.map((e, i) => ({ rel: rels[i], file: e.file }));
+  const zipFiles = entries.filter(e => /\.zip$/i.test(e.path));
+  const nonZip = entries.filter(e => !/\.zip$/i.test(e.path));
 
-  const topZips = withRel.filter(e => !e.rel.includes("/") && /\.zip$/i.test(e.rel));
-  const looseFiles = withRel.filter(e => !e.rel.includes("/") && !/\.zip$/i.test(e.rel));
-  const folderMap = new Map<string, { rel: string; file: JSZip.JSZipObject }[]>();
-  for (const e of withRel) {
-    const slash = e.rel.indexOf("/");
-    if (slash > 0) {
-      const top = e.rel.slice(0, slash);
-      if (!folderMap.has(top)) folderMap.set(top, []);
-      folderMap.get(top)!.push(e);
-    }
-  }
-
-  // 4) 래퍼 zip 한 겹(단일 zip 외 아무것도 없음) → 그 안으로 재귀(깊이 제한).
-  if (depth < 5 && topZips.length === 1 && folderMap.size === 0 && looseFiles.length === 0) {
+  // 래퍼 zip 한 겹(단일 zip 외 아무것도 없음) → 그 안으로 재귀(깊이 제한).
+  if (depth < 5 && zipFiles.length === 1 && nonZip.length === 0) {
     try {
-      const inner = await JSZip.loadAsync(await topZips[0].file.async("uint8array"));
+      const inner = await JSZip.loadAsync(await zipFiles[0].file.async("uint8array"));
       const u = await analyzeZipUnits(inner, depth + 1);
       if (u.length > 0) return u;
     } catch { /* 못 열면 아래 규칙으로 */ }
   }
 
   const units: PacketUnit[] = [];
-  // 2) 내부 zip 여러 개 → 각 zip 그대로 1명.
-  for (const z of topZips) units.push({ name: z.rel.split("/").pop() || "packet.zip", bytes: () => z.file.async("uint8array") });
-  // 3) 폴더 여러/하나 → 각 폴더 re-zip 1명.
-  folderMap.forEach((files, folder) => units.push({ name: `${folder}.zip`, bytes: () => rezipFiles(files, folder + "/") }));
-  // 5) 폴더·zip 전혀 없이 루트에 사진만 → 분리 불가, 전부 1명.
-  if (units.length === 0 && looseFiles.length > 0) {
-    units.push({ name: "사진모음.zip", bytes: () => rezipFiles(looseFiles, "") });
+  // 내부 zip이 여러 개면 셀러가 미리 묶은 것 → 각 zip 그대로 1명.
+  for (const z of zipFiles) units.push({ name: z.path.split("/").pop() || "packet.zip", bytes: () => z.file.async("uint8array") });
+
+  // 사진 파일들을 '바로 위 폴더(=사진이 실제로 든 폴더)' 단위로 그룹 → 각 폴더 = 1명.
+  // 래퍼/배치 폴더가 몇 겹이든, 최상위 폴더가 여러 개든 상관없이 정확히 쪼개진다.
+  const groups = new Map<string, { rel: string; file: JSZip.JSZipObject }[]>();
+  for (const e of nonZip) {
+    const slash = e.path.lastIndexOf("/");
+    const parent = slash >= 0 ? e.path.slice(0, slash) : ""; // 사진이 직접 들어있는 폴더 경로
+    if (!groups.has(parent)) groups.set(parent, []);
+    groups.get(parent)!.push({ rel: e.path, file: e.file });
   }
+  groups.forEach((files, parent) => {
+    const name = (parent ? parent.split("/").pop() : "사진모음") || "사진모음";
+    units.push({ name: `${name}.zip`, bytes: () => rezipFiles(files, parent ? parent + "/" : "") });
+  });
+
   units.sort((a, b) => a.name.localeCompare(b.name, "ko"));
   return units;
 }
