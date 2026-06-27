@@ -132,11 +132,11 @@ function plusDays(date: string, n: number) {
   return fmtLocal(d);
 }
 
-/** 당일 진행(단일) 신청 마감 시각(시). 이 시각 이후엔 오늘 시작 불가. */
+/** 당일 신청 마감 시각(시). 이 시각 이후엔 '오늘 시작' 캠페인 신청 불가(모드 무관). */
 const SAME_DAY_CUTOFF_HOUR = 14; // 오후 2시
-/** 단일 진행은 오후 2시 이후면 오늘 선택 불가 → 최소 시작일이 내일로 밀린다. */
-function minStartStr(mode: DistributeMode) {
-  if (mode === "single" && new Date().getHours() >= SAME_DAY_CUTOFF_HOUR) {
+/** 오후 2시 이후면 오늘 선택 불가 → 최소 시작일이 내일로 밀린다. (단일·배분 동일) */
+function minStartStr() {
+  if (new Date().getHours() >= SAME_DAY_CUTOFF_HOUR) {
     return plusDays(todayStr(), 1);
   }
   return todayStr();
@@ -374,9 +374,9 @@ export default function CampaignWizard() {
     if (step === 1) {
       if (totalReviewers < 1) { toast.error("모집 인원을 1명 이상 입력해 주세요."); return false; }
       if (!data.startDate) { toast.error("시작 날짜를 선택해 주세요."); return false; }
-      if (data.startDate < minStartStr(data.distributeMode)) {
-        if (data.distributeMode === "single" && data.startDate === todayStr()) {
-          toast.error(`당일 진행 캠페인은 오후 ${SAME_DAY_CUTOFF_HOUR - 12}시까지만 신청할 수 있어요. 시작일을 내일 이후로 선택해 주세요.`);
+      if (data.startDate < minStartStr()) {
+        if (data.startDate === todayStr()) {
+          toast.error(`오늘 시작 캠페인은 오후 ${SAME_DAY_CUTOFF_HOUR - 12}시까지만 신청할 수 있어요. 시작일을 내일 이후로 선택해 주세요.`);
         } else {
           toast.error("시작 날짜는 오늘 이후로 선택해 주세요.");
         }
@@ -654,7 +654,7 @@ export default function CampaignWizard() {
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="startDate" className="font-semibold">시작 날짜 *</Label>
-                      <Input id="startDate" type="date" min={minStartStr(data.distributeMode)} value={data.startDate} onChange={e => setStart(e.target.value)} className="h-11" />
+                      <Input id="startDate" type="date" min={minStartStr()} value={data.startDate} onChange={e => setStart(e.target.value)} className="h-11" />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="endDate" className="font-semibold">종료 날짜 {data.distributeMode === "single" && <span className="font-normal text-muted-foreground">(자동)</span>}</Label>
@@ -665,7 +665,7 @@ export default function CampaignWizard() {
                     </div>
                   </div>
                   {data.distributeMode === "distribute" && <p className="-mt-3 text-xs text-muted-foreground">기간은 최대 10일까지 설정할 수 있어요.</p>}
-                  {data.distributeMode === "single" && <p className="-mt-3 text-xs text-muted-foreground">⏰ 당일 진행은 오후 {SAME_DAY_CUTOFF_HOUR - 12}시까지만 신청할 수 있어요. (이후엔 내일부터 가능)</p>}
+                  <p className="-mt-3 text-xs text-muted-foreground">⏰ 오늘 시작 캠페인은 오후 {SAME_DAY_CUTOFF_HOUR - 12}시까지만 신청할 수 있어요. (이후엔 내일부터 가능)</p>
 
                   {/* 날짜별 배분 */}
                   {data.distributeMode === "distribute" && days.length > 0 && (

@@ -356,12 +356,11 @@ export const campaignRouter = router({
   request: businessProcedure
     .input(campaignInput)
     .mutation(async ({ ctx, input }) => {
-      // 당일 진행(단일) 캠페인은 KST 오후 2시까지만 신청 가능 (서버 무결성 가드).
+      // 오늘 시작하는 캠페인은 KST 오후 2시까지만 신청 가능 (모드 무관, 서버 무결성 가드).
       const kstNow = new Date(Date.now() + 9 * 3600 * 1000);
       const kstToday = kstNow.toISOString().slice(0, 10);
-      const isSameDay = !input.schedule && (!input.endDate || input.endDate === input.startDate);
-      if (isSameDay && input.startDate === kstToday && kstNow.getUTCHours() >= 14) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "당일 진행 캠페인은 오후 2시까지만 신청할 수 있습니다. 시작일을 내일 이후로 설정해 주세요." });
+      if (input.startDate === kstToday && kstNow.getUTCHours() >= 14) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "오늘 시작하는 캠페인은 오후 2시까지만 신청할 수 있습니다. 시작일을 내일 이후로 설정해 주세요." });
       }
 
       const REVIEW_FEE = 2400;   // 셀러 부담 건당 리뷰 비용
