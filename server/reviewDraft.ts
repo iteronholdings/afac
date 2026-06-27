@@ -266,7 +266,15 @@ const PERSONAS: Persona[] = [
   },
 ];
 
-/** 한 편의 리뷰 원고를 생성한다. (페르소나 무작위 → 말투 다양화) */
+/** 장문형 비율 (나머지는 단문형). 3:7 → 0.3 */
+const LONG_FORM_RATIO = 0.3;
+
+/**
+ * 한 편의 리뷰 원고를 생성한다. (페르소나 무작위 → 말투 다양화 + 길이 랜덤화)
+ * 길이는 LONG_FORM_RATIO 비율로 장문/단문을 섞는다 (기본 장문 3 : 단문 7).
+ *  - 장문: 본문 3~4문장 + (사진형은 실물언급) → 5~7문장.
+ *  - 단문: 본문 1~2문장, 가끔 오프너 생략 → 2~3문장으로 짧게.
+ */
 export function generateReviewDraft(opts: {
   type: DraftType;
   title?: string | null;
@@ -275,14 +283,21 @@ export function generateReviewDraft(opts: {
   const noun = productNoun(opts.keyword, opts.title);
   const fill = (s: string) => s.replace(/\{N\}/g, noun);
   const persona = pick(PERSONAS);
+  const long = Math.random() < LONG_FORM_RATIO;
 
-  const bodyCount = chance(0.5) ? 2 : 3;
+  // 본문 문장 수: 장문 3~4, 단문 1~2.
+  const bodyCount = long ? (chance(0.5) ? 3 : 4) : (chance(0.5) ? 1 : 2);
   const body = shuffle(persona.bodies).slice(0, bodyCount);
-  if (opts.type === "photo") {
-    body.splice(chance(0.5) ? 0 : 1, 0, pick(PHOTO_LINES));
+
+  // 사진형 실물언급: 장문은 항상, 단문은 절반만(짧게 유지).
+  if (opts.type === "photo" && (long || chance(0.5))) {
+    body.splice(chance(0.5) ? 0 : body.length, 0, pick(PHOTO_LINES));
   }
 
-  const parts = [fill(pick(persona.openers)), ...body, pick(persona.closers)];
+  const parts: string[] = [];
+  // 단문은 가끔 오프너를 생략해 더 짧게.
+  if (long || !chance(0.35)) parts.push(fill(pick(persona.openers)));
+  parts.push(...body, pick(persona.closers));
   let text = parts.join(" ");
 
   const emoji = pick(persona.emojis);
