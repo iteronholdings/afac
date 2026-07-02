@@ -133,4 +133,17 @@ export const depositRouter = router({
   myRequests: protectedProcedure.query(async ({ ctx }) => {
     return db.listDepositRequestsByUser(ctx.user.id);
   }),
+
+  /** 마지막으로 입력한 세금계산서 발급 정보 (충전 창 자동입력용). 없으면 null. */
+  lastTaxInfo: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await db.listDepositRequestsByUser(ctx.user.id); // 최신순
+    const last = rows.find(r => r.taxInvoice === "issue" && (r.bizNumber || r.companyName));
+    if (!last) return null;
+    return {
+      bizNumber: last.bizNumber ?? "",
+      repName: last.repName ?? "",
+      companyName: last.companyName ?? "",
+      taxEmail: last.taxEmail ?? "",
+    };
+  }),
 });

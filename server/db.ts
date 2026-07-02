@@ -80,6 +80,7 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE deposit_requests ADD COLUMN paidAt TIMESTAMP NULL`,
     sql`ALTER TABLE participations ADD COLUMN reviewDraft TEXT`,
     sql`ALTER TABLE participations ADD COLUMN assignedDate VARCHAR(20)`,
+    sql`ALTER TABLE users ADD COLUMN customReviewFee INT NULL`,
   ];
   for (const stmt of alterStatements) {
     try {
@@ -403,6 +404,14 @@ export async function setMemberCode(id: number, memberCode: string) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(users).set({ memberCode }).where(eq(users.id, id));
+  return getUserById(id);
+}
+
+/** 업체별 건당 리뷰 단가 설정 (null = 기본 단가로 복원). */
+export async function setCustomReviewFee(id: number, fee: number | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ customReviewFee: fee }).where(eq(users.id, id));
   return getUserById(id);
 }
 

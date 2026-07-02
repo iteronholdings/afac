@@ -381,12 +381,13 @@ export const campaignRouter = router({
         throw new TRPCError({ code: "BAD_REQUEST", message: "오늘 시작하는 캠페인은 오후 2시까지만 신청할 수 있습니다. 시작일을 내일 이후로 설정해 주세요." });
       }
 
-      const REVIEW_FEE = 2400;   // 셀러 부담 건당 리뷰 비용
+      const me = await db.getUserById(ctx.user.id);
+      // 건당 리뷰 비용: 업체별 우대 단가(VIP)가 있으면 그 값, 없으면 기본 2,400원.
+      const REVIEW_FEE = me?.customReviewFee ?? 2400;
       const SHIPPING_FEE = 2300; // 건당 택배비
       const perUnit = (input.productPrice ?? 0) + REVIEW_FEE + SHIPPING_FEE;
       const total = perUnit * input.slots;
 
-      const me = await db.getUserById(ctx.user.id);
       const balance = me?.depositBalance ?? 0;
       if (balance < total) {
         throw new TRPCError({

@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { useLocation } from "wouter";
 
 // ── pricing (per reviewer, VAT 포함) ───────────────────────
-const REVIEW_FEE = 2400;       // 셀러가 내는 건당 리뷰 비용
+const REVIEW_FEE = 2400;       // 셀러가 내는 건당 리뷰 비용 (기본가 — 업체별 우대 단가가 있으면 그 값 사용)
 const REVIEWER_REWARD = 1000;  // 그 중 리뷰어에게 리워딩되는 금액 (나머지 1,400원은 플랫폼 수수료)
 const SHIPPING_FEE = 2300;
 
@@ -100,7 +100,7 @@ const GUIDES: { title: string; items: { label: string; desc: string; highlight?:
     title: "확인 & 결제",
     items: [
       { label: "예치금 결제", desc: "총 비용이 예치금에서 차감되며, 입금 확인 후 캠페인이 시작됩니다.", highlight: true },
-      { label: "비용 구성", desc: "상품가 + 리뷰비(건당 2,400원) + 택배비(건당 2,300원), VAT 포함." },
+      { label: "비용 구성", desc: "상품가 + 리뷰비(기본 건당 2,400원) + 택배비(건당 2,300원), VAT 포함." },
     ],
   },
 ];
@@ -218,7 +218,9 @@ export default function CampaignWizard() {
     [data.photoCount, data.textCount, data.starCount]
   );
   const salePriceNum = Number(data.salePrice) || 0;
-  const reviewCost = REVIEW_FEE * totalReviewers;
+  // 건당 리뷰 비용: 업체별 우대 단가(VIP)가 설정돼 있으면 그 값 (서버 계산과 동일 규칙).
+  const reviewFee = (user as { customReviewFee?: number | null } | null | undefined)?.customReviewFee ?? REVIEW_FEE;
+  const reviewCost = reviewFee * totalReviewers;
   const shippingCost = SHIPPING_FEE * totalReviewers;
   const productCost = salePriceNum * totalReviewers;
   const grandTotal = productCost + reviewCost + shippingCost;
@@ -761,7 +763,7 @@ export default function CampaignWizard() {
                   <div className="overflow-hidden rounded-2xl border border-border/70 text-sm">
                     {[
                       ["상품가", `${won(salePriceNum)} × ${totalReviewers}`, won(productCost)],
-                      ["리뷰비용 (건당 2,400원)", `2,400 × ${totalReviewers}`, won(reviewCost)],
+                      [`리뷰비용 (건당 ${reviewFee.toLocaleString()}원)${reviewFee !== REVIEW_FEE ? " ⭐우대가" : ""}`, `${reviewFee.toLocaleString()} × ${totalReviewers}`, won(reviewCost)],
                       ["택배비용 (건당 2,300원)", `2,300 × ${totalReviewers}`, won(shippingCost)],
                     ].map(([label, calc, amount]) => (
                       <div key={label} className="flex items-center justify-between bg-card px-4 py-3">

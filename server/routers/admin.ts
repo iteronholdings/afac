@@ -99,9 +99,24 @@ export const adminRouter = router({
         phone: u.phone ?? "-",
         memberCode: u.memberCode ?? null,
         depositBalance: u.depositBalance ?? 0,
+        customReviewFee: u.customReviewFee ?? null,
         createdAt: u.createdAt,
       }));
   }),
+
+  /** 업체별 건당 리뷰 단가 설정 (VIP 우대가). fee=null이면 기본 단가로 복원. */
+  setReviewFee: adminProcedure
+    .input(z.object({
+      userId: z.number().int(),
+      fee: z.number().int().min(0, "0원 이상이어야 합니다.").max(1_000_000).nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const target = await db.getUserById(input.userId);
+      if (!target || target.role !== "business") {
+        throw new TRPCError({ code: "NOT_FOUND", message: "업체를 찾을 수 없습니다." });
+      }
+      return db.setCustomReviewFee(input.userId, input.fee);
+    }),
 
   /** 예치금 추가/차감. amount는 양수, action으로 방향 결정. */
   adjustDeposit: adminProcedure

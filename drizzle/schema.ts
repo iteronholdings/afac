@@ -40,6 +40,9 @@ export const users = mysqlTable("users", {
   /** 예치금 잔액 (원). 업체가 캠페인 결제에 사용. */
   depositBalance: int("depositBalance").notNull().default(0),
 
+  /** 업체별 건당 리뷰 단가 (VIP 우대가 등). null이면 기본 단가(2,400원) 적용. */
+  customReviewFee: int("customReviewFee"),
+
   /** 리뷰어 절차 안내에 동의한 시각. null = 아직 미동의 (리뷰어 활동 차단). */
   reviewerAgreedAt: timestamp("reviewerAgreedAt"),
 

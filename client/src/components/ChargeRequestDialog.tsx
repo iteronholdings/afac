@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { Check, Copy, FileText, Landmark, Loader2, Wallet } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 /**
@@ -61,6 +61,18 @@ export default function ChargeRequestDialog({
   const [taxEmail, setTaxEmail] = useState("");
   const [processing, setProcessing] = useState(false);
   const [issued, setIssued] = useState<Issued | null>(null);
+
+  // 이전에 입력한 세금계산서 정보 자동입력 (필드가 비어있을 때만 채움 → 수정 자유).
+  const { data: lastTax } = trpc.deposit.lastTaxInfo.useQuery(undefined, { enabled: open });
+  useEffect(() => {
+    if (!open || !lastTax) return;
+    if (bizNumber || repName || companyName || taxEmail) return; // 이미 입력 중이면 덮어쓰지 않음
+    setBizNumber(lastTax.bizNumber);
+    setRepName(lastTax.repName);
+    setCompanyName(lastTax.companyName);
+    setTaxEmail(lastTax.taxEmail);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, lastTax]);
 
   const reset = () => {
     setAmount("");
@@ -292,7 +304,10 @@ export default function ChargeRequestDialog({
                       <Input id="taxEmail" type="email" inputMode="email" placeholder="tax@company.com" value={taxEmail} maxLength={120}
                         onChange={e => setTaxEmail(e.target.value)} className="h-10 bg-card" />
                     </div>
-                    <p className="text-[11px] text-muted-foreground">입력하신 정보로 세금계산서가 발행됩니다.</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      입력하신 정보로 세금계산서가 발행됩니다.
+                      {lastTax && " (이전에 입력한 정보를 자동으로 불러왔어요 — 수정 가능)"}
+                    </p>
                   </div>
                 )}
               </div>

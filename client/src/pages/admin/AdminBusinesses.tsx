@@ -12,11 +12,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
-import { Building2, Loader2, Minus, Plus, Receipt, Wallet } from "lucide-react";
+import { BadgePercent, Building2, Loader2, Minus, Plus, Receipt, Wallet } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 type Target = { id: number; name: string; balance: number; action: "charge" | "deduct" } | null;
+
+/** 기본 건당 리뷰 단가 (서버 campaign.request와 동일). */
+const DEFAULT_REVIEW_FEE = 2400;
 
 export default function AdminBusinesses() {
   const utils = trpc.useUtils();
@@ -53,6 +56,24 @@ export default function AdminBusinesses() {
 
   const open = (t: NonNullable<Target>) => { setTarget(t); setAmount(""); setMemo(""); };
   const close = () => setTarget(null);
+
+  // VIP 리뷰 단가 설정
+  const [feeFor, setFeeFor] = useState<{ id: number; name: string; current: number | null } | null>(null);
+  const [feeInput, setFeeInput] = useState("");
+  const setFee = trpc.admin.setReviewFee.useMutation({
+    onSuccess: (_res, vars) => {
+      utils.admin.listBusinesses.invalidate();
+      toast.success(vars.fee == null ? "기본 단가(2,400원)로 복원했습니다." : `리뷰 단가를 ${vars.fee.toLocaleString()}원으로 설정했습니다.`);
+      setFeeFor(null);
+    },
+    onError: err => toast.error(err.message),
+  });
+  const submitFee = () => {
+    if (!feeFor) return;
+    const fee = parseInt(feeInput.replace(/[^0-9]/g, ""), 10);
+    if (!Number.isFinite(fee) || fee <= 0) { toast.error("단가를 입력해 주세요."); return; }
+    setFee.mutate({ userId: feeFor.id, fee });
+  };
 
   const submit = () => {
     if (!target) return;
@@ -135,13 +156,13 @@ export default function AdminBusinesses() {
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
           <div className="overflow-x-auto">
-          <div className="min-w-[760px]">
-          <div className="grid grid-cols-[1.5fr_1fr_1.2fr_1.3fr_auto] items-center gap-3 border-b border-border/60 bg-muted/40 px-4 py-3 text-xs font-semibold text-muted-foreground">
-            <div>업체명</div><div>코드</div><div>연락처</div><div className="text-right">예치금 잔액</div><div className="text-right">예치금 조정</div>
+          <div className="min-w-[880px]">
+          <div className="grid grid-cols-[1.5fr_0.8fr_1.1fr_1fr_1.2fr_auto] items-center gap-3 border-b border-border/60 bg-muted/40 px-4 py-3 text-xs font-semibold text-muted-foreground">
+            <div>업체명</div><div>코드</div><div>연락처</div><div className="text-right">리뷰 단가</div><div className="text-right">예치금 잔액</div><div className="text-right">예치금 조정</div>
           </div>
           <div className="divide-y divide-border/50">
             {data.map(b => (
-              <div key={b.id} className="grid grid-cols-[1.5fr_1fr_1.2fr_1.3fr_auto] items-center gap-3 px-4 py-3.5 text-sm">
+              <div key={b.id} className="grid grid-cols-[1.5fr_0.8fr_1.1fr_1fr_1.2fr_auto] items-center gap-3 px-4 py-3.5 text-sm">
                 <div>
                   <p className="font-semibold text-foreground">{b.fullName}</p>
                   <p className="text-xs text-muted-foreground">{b.loginId}</p>
@@ -150,6 +171,22 @@ export default function AdminBusinesses() {
                   <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-mono text-muted-foreground">{b.memberCode ?? "-"}</span>
                 </div>
                 <div className="text-muted-foreground">{b.phone}</div>
+                <div className="text-right">
+                  <button
+                    type="button"
+                    title="클릭해서 단가 변경"
+                    onClick={() => { setFeeFor({ id: b.id, name: b.fullName, current: b.customReviewFee }); setFeeInput(b.customReviewFee != null ? String(b.customReviewFee) : ""); }}
+                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold transition-colors ${
+                      b.customReviewFee != null
+                        ? "bg-amber-100 text-amber-800 hover:bg-amber-200"
+                        : "bg-muted text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    <BadgePercent className="h-3 w-3" />
+                    {(b.customReviewFee ?? DEFAULT_REVIEW_FEE).toLocaleString()}원
+                    {b.customReviewFee != null && <span>⭐</span>}
+                  </button>
+                </div>
                 <div className="text-right text-base font-extrabold text-primary">{b.depositBalance.toLocaleString()}원</div>
                 <div className="flex justify-end gap-2">
                   <Button size="sm" className="h-8 gap-1 rounded-full bg-emerald-600 hover:bg-emerald-700" onClick={() => open({ id: b.id, name: b.fullName, balance: b.depositBalance, action: "charge" })}>
@@ -203,6 +240,52 @@ export default function AdminBusinesses() {
               {adjust.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
               {target?.action === "charge" ? "추가하기" : "차감하기"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* VIP 리뷰 단가 설정 */}
+      <Dialog open={!!feeFor} onOpenChange={o => !o && setFeeFor(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BadgePercent className="h-5 w-5 text-primary" /> 리뷰 단가 설정
+            </DialogTitle>
+          </DialogHeader>
+          {feeFor && (
+            <div className="space-y-4">
+              <div className="rounded-xl bg-muted/50 px-3 py-2 text-sm">
+                <span className="text-muted-foreground">{feeFor.name}</span> · 현재{" "}
+                <b className="text-foreground">{(feeFor.current ?? DEFAULT_REVIEW_FEE).toLocaleString()}원</b>
+                {feeFor.current == null && <span className="text-xs text-muted-foreground"> (기본가)</span>}
+                {feeFor.current != null && <span className="text-xs font-bold text-amber-700"> ⭐우대가</span>}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="reviewFee">건당 리뷰 단가 (원)</Label>
+                <Input id="reviewFee" inputMode="numeric" placeholder={`기본 ${DEFAULT_REVIEW_FEE.toLocaleString()}`} value={feeInput}
+                  onChange={e => setFeeInput(e.target.value)} onKeyDown={e => e.key === "Enter" && submitFee()} className="h-11" />
+                <p className="text-[11px] text-muted-foreground">
+                  이 업체가 캠페인 결제 시 적용되는 건당 리뷰 비용입니다. (리뷰어 작업수당 1,000원은 동일)
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button
+              variant="ghost"
+              className="text-muted-foreground"
+              disabled={setFee.isPending || feeFor?.current == null}
+              onClick={() => feeFor && setFee.mutate({ userId: feeFor.id, fee: null })}
+            >
+              기본가로 복원
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setFeeFor(null)}>취소</Button>
+              <Button onClick={submitFee} disabled={setFee.isPending} className="font-bold">
+                {setFee.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                저장
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
