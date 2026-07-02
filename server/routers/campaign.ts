@@ -11,6 +11,7 @@ import {
   storagePut,
 } from "../storage";
 import { generateReviewDraft } from "../reviewDraft";
+import { distributeTodayStatus } from "../schedule";
 
 /** photoGuideZip / assignedPacket 값이 R2 키 참조(`r2:<key>`)면 키를, 아니면 null 반환. */
 function r2KeyOf(value?: string | null): string | null {
@@ -212,30 +213,43 @@ export async function assignPacketsForCampaign(
   return { assigned, units: units.length, participants: parts.length };
 }
 
+/**
+ * 리뷰어 노출용 오픈 캠페인 목록.
+ * 배분(distribute) 캠페인은 **오늘 배분된 날짜에만** 노출한다 — 미래 날짜 선점 금지.
+ * (오늘이 모집일이 아니거나 오늘 정원이 다 찼으면 목록에서 숨김)
+ * remaining도 배분 캠페인은 '오늘 남은 자리'로 표시한다.
+ */
+async function listOpenForReviewers() {
+  const rows = await db.listCampaigns({ onlyOpen: true });
+  type Row = Omit<typeof rows[number], "photoGuideZip"> & { taken: number; remaining: number };
+  const result: Row[] = [];
+  for (const c of rows) {
+    const parts = await db.listParticipationsByCampaign(c.id);
+    const taken = parts.filter(p => p.status !== "rejected").length;
+    const dist = distributeTodayStatus(c.schedule, parts);
+    // 무거운 photoGuideZip(레거시 base64)은 목록에서 제외.
+    const { photoGuideZip: _zip, ...light } = c;
+    if (dist.isDistribute) {
+      if (!dist.joinable) continue; // 오늘 모집 아님/오늘 마감 → 숨김
+      const todayRemaining = Math.max(0, dist.todayCap - dist.todayTaken);
+      result.push({ ...light, taken, remaining: Math.min(todayRemaining, Math.max(0, c.slots - taken)) });
+    } else {
+      result.push({ ...light, taken, remaining: Math.max(0, c.slots - taken) });
+    }
+  }
+  return result;
+}
+
 export const campaignRouter = router({
   // Public: list open campaigns for homepage preview (max 3).
   listPreview: publicProcedure.query(async () => {
-    const rows = await db.listCampaigns({ onlyOpen: true });
-    const withCounts = await Promise.all(
-      rows.slice(0, 3).map(async c => {
-        const taken = await db.countActiveParticipations(c.id);
-        return { ...c, taken, remaining: Math.max(0, c.slots - taken) };
-      })
-    );
-    return withCounts;
+    return (await listOpenForReviewers()).slice(0, 3);
   }),
 
   // Protected: list open campaigns for reviewers (with remaining slots).
   // 로그인 사용자만 목록 조회 가능.
   listOpen: protectedProcedure.query(async () => {
-    const rows = await db.listCampaigns({ onlyOpen: true });
-    const withCounts = await Promise.all(
-      rows.map(async c => {
-        const taken = await db.countActiveParticipations(c.id);
-        return { ...c, taken, remaining: Math.max(0, c.slots - taken) };
-      })
-    );
-    return withCounts;
+    return listOpenForReviewers();
   }),
 
   // Protected: campaign detail. 로그인한 사용자만 조회 가능.

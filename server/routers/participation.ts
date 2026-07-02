@@ -4,6 +4,7 @@ import * as db from "../db";
 import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
 import { assignPacketsForCampaign } from "./campaign";
 import { generateReviewDraft } from "../reviewDraft";
+import { distributeTodayStatus } from "../schedule";
 
 /**
  * 사진 패킷 배정(대용량 ZIP 분해·R2 업로드, 수십초~수분 소요)을 **백그라운드**로 실행한다.
@@ -31,31 +32,6 @@ function scheduleAssignPacket(campaignId: number) {
  * 새 참여자에게 AI 리뷰 원고 초안을 생성·저장한다. (사진·글자 리뷰어 대상, 별점 제외)
  * best-effort. reviewType이 photo면 사진형, 그 외(text·구캠페인 null)는 글자형 톤.
  */
-/**
- * 배분(distribute) 캠페인의 schedule({날짜:정원})에서, 기존 참여자들의 배정 날짜를
- * 집계해 아직 정원이 안 찬 가장 이른 날짜를 반환한다. 모두 차면 null.
- * schedule이 없거나(단일 진행) 비면 null(날짜 미배정).
- */
-function pickAssignedDate(
-  scheduleJson: string | null | undefined,
-  parts: { status: string; assignedDate?: string | null }[],
-): string | null {
-  if (!scheduleJson) return null;
-  let sched: Record<string, number>;
-  try { sched = JSON.parse(scheduleJson); } catch { return null; }
-  const dates = Object.keys(sched).filter(d => (Number(sched[d]) || 0) > 0).sort();
-  if (dates.length === 0) return null;
-  const counts: Record<string, number> = {};
-  for (const p of parts) {
-    if (p.status === "rejected" || !p.assignedDate) continue;
-    counts[p.assignedDate] = (counts[p.assignedDate] || 0) + 1;
-  }
-  for (const d of dates) {
-    if ((counts[d] || 0) < Number(sched[d])) return d;
-  }
-  return null; // 모든 날짜 마감
-}
-
 async function tryAssignReviewDraft(participationId: number, reviewType: string | null | undefined, campaignId: number) {
   if (reviewType === "star") return; // 별점 리뷰어는 원고 없음
   try {
@@ -140,14 +116,18 @@ export const participationRouter = router({
         }
       }
 
-      // 배분 캠페인이면 진행 날짜를 자동 배정(선착순, 이른 날짜부터). 단일 진행이면 null.
+      // 배분 캠페인은 **오늘 배분된 정원**에만 참여 가능 (미래 날짜 선점 금지 → 진행일 펑크 방지).
       const partsForDate = await db.listParticipationsByCampaign(input.campaignId);
-      const assignedDate = pickAssignedDate(campaign.schedule, partsForDate);
-      if (campaign.schedule && assignedDate === null) {
-        // 배분 캠페인인데 모든 날짜가 마감된 경우.
-        let hasDates = false;
-        try { hasDates = Object.values(JSON.parse(campaign.schedule)).some(v => Number(v) > 0); } catch { /* ignore */ }
-        if (hasDates) throw new TRPCError({ code: "BAD_REQUEST", message: "모든 진행 날짜의 모집이 마감되었습니다." });
+      const dist = distributeTodayStatus(campaign.schedule, partsForDate);
+      let assignedDate: string | null = null;
+      if (dist.isDistribute) {
+        if (dist.reason === "not_today") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "오늘은 이 캠페인의 모집 날짜가 아닙니다. 진행 날짜에 다시 참여해 주세요." });
+        }
+        if (dist.reason === "full_today") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "오늘 모집 인원이 마감되었습니다. 다음 진행일에 다시 참여해 주세요." });
+        }
+        assignedDate = dist.today; // 항상 오늘 날짜로 배정
       }
 
       // 리뷰 유형별 정원 (사진 → 글자 → 별점 순으로 선착순 자동배정)

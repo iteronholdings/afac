@@ -156,13 +156,13 @@ export default function AdminBusinesses() {
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
           <div className="overflow-x-auto">
-          <div className="min-w-[880px]">
-          <div className="grid grid-cols-[1.5fr_0.8fr_1.1fr_1fr_1.2fr_auto] items-center gap-3 border-b border-border/60 bg-muted/40 px-4 py-3 text-xs font-semibold text-muted-foreground">
+          <div className="min-w-[960px]">
+          <div className="grid grid-cols-[1.4fr_0.7fr_1fr_0.9fr_1fr_330px] items-center gap-3 border-b border-border/60 bg-muted/40 px-4 py-3 text-xs font-semibold text-muted-foreground">
             <div>업체명</div><div>코드</div><div>연락처</div><div className="text-right">리뷰 단가</div><div className="text-right">예치금 잔액</div><div className="text-right">예치금 조정</div>
           </div>
           <div className="divide-y divide-border/50">
             {data.map(b => (
-              <div key={b.id} className="grid grid-cols-[1.5fr_0.8fr_1.1fr_1fr_1.2fr_auto] items-center gap-3 px-4 py-3.5 text-sm">
+              <div key={b.id} className="grid grid-cols-[1.4fr_0.7fr_1fr_0.9fr_1fr_330px] items-center gap-3 px-4 py-3.5 text-sm">
                 <div>
                   <p className="font-semibold text-foreground">{b.fullName}</p>
                   <p className="text-xs text-muted-foreground">{b.loginId}</p>
