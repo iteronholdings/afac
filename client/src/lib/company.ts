@@ -17,7 +17,7 @@ export const COMPANY = {
   /** 고객센터 이메일 */
   email: "ceo@iteron.kr",
   /** 고객센터 전화 */
-  tel: "[고객센터 전화]",
+  tel: "010-2869-6449",
   /** 개인정보 보호책임자 */
   privacyOfficer: "김채현",
   /** 문서 시행일 */
