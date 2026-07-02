@@ -10,6 +10,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import {
   Building2,
+  CalendarDays,
   ChevronDown,
   ChevronRight,
   FolderArchive,
@@ -54,6 +55,26 @@ const PARTICIPATION_STATUS_LABEL: Record<string, string> = {
   paid: "입금완료",
   rejected: "반려",
 };
+
+/** schedule JSON({날짜:인원}) → 날짜순 [날짜, 인원] 목록. 배분 캠페인이 아니면 []. */
+function parseSchedule(json?: string | null): [string, number][] {
+  if (!json) return [];
+  try {
+    const s = JSON.parse(json) as Record<string, number>;
+    return Object.entries(s)
+      .filter(([, n]) => Number(n) > 0)
+      .map(([d, n]) => [d, Number(n)] as [string, number])
+      .sort((a, b) => a[0].localeCompare(b[0]));
+  } catch {
+    return [];
+  }
+}
+const mmdd = (s: string) => s.slice(5).replace("-", "/");
+/** 오늘 'YYYY-MM-DD' (로컬). toISOString은 UTC라 하루 밀리므로 사용 금지. */
+const TODAY_STR = (() => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+})();
 
 export default function BusinessDashboard() {
   const [, navigate] = useLocation();
@@ -130,6 +151,13 @@ export default function BusinessDashboard() {
                       <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
                         <span className="flex items-center gap-1"><Search className="h-3 w-3" />{c.keyword}</span>
                         <span className="flex items-center gap-1"><Users className="h-3 w-3" />{c.taken} / {c.slots}명 참여</span>
+                        {c.startDate && (
+                          <span className="flex items-center gap-1">
+                            <CalendarDays className="h-3 w-3" />
+                            {c.startDate}{c.endDate && c.endDate !== c.startDate ? ` ~ ${c.endDate}` : ""}
+                            {parseSchedule(c.schedule).length > 0 ? " · 배분" : " · 단일"}
+                          </span>
+                        )}
                       </div>
                     </div>
                     {expanded ? (
@@ -157,6 +185,49 @@ export default function BusinessDashboard() {
                           </Button>
                         )}
                       </div>
+
+                      {/* 배분 캠페인: 날짜별 모집 인원 현황 */}
+                      {(() => {
+                        const sched = parseSchedule(c.schedule);
+                        if (sched.length === 0) return null;
+                        const takenByDate: Record<string, number> = {};
+                        for (const p of participants ?? []) {
+                          if (p.status !== "rejected" && p.assignedDate) {
+                            takenByDate[p.assignedDate] = (takenByDate[p.assignedDate] || 0) + 1;
+                          }
+                        }
+                        return (
+                          <div className="mb-4 rounded-xl border border-border/60 bg-card p-3">
+                            <p className="mb-2 flex items-center gap-1.5 text-xs font-bold text-foreground">
+                              <CalendarDays className="h-3.5 w-3.5 text-primary" /> 모집 일정 <span className="font-normal text-muted-foreground">(날짜별 모집/참여)</span>
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {sched.map(([d, cap]) => {
+                                const taken = takenByDate[d] ?? 0;
+                                const isToday = d === TODAY_STR;
+                                const full = taken >= cap;
+                                return (
+                                  <span
+                                    key={d}
+                                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                                      isToday
+                                        ? "border-primary bg-primary/10 text-primary"
+                                        : full
+                                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                          : "border-border bg-muted/40 text-muted-foreground"
+                                    }`}
+                                  >
+                                    {mmdd(d)} · {loadingParts ? `${cap}명` : `${taken}/${cap}명`}
+                                    {isToday && <span className="font-bold">오늘</span>}
+                                    {!isToday && full && "✓"}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       {loadingParts ? (
                         <div className="space-y-2">
                           {[0, 1].map(i => <div key={i} className="h-10 animate-pulse rounded-xl bg-muted" />)}
