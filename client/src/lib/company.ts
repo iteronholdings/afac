@@ -7,19 +7,19 @@ export const COMPANY = {
   name: "아르벤팩토리",
   nameEn: "ARVEN FACTORY",
   /** 대표자명 */
-  ceo: "[대표자명]",
+  ceo: "김채현",
   /** 사업자등록번호 */
-  bizNo: "[사업자등록번호]",
-  /** 통신판매업 신고번호 */
+  bizNo: "237-22-02335",
+  /** 통신판매업 신고번호 (신고 후 기입) */
   mailOrderNo: "[통신판매업 신고번호]",
   /** 사업장 주소 */
-  address: "[사업장 주소]",
+  address: "부산광역시 해운대구 반여로 96, 2층 S79호 (반여동, 영풍빌딩)",
   /** 고객센터 이메일 */
-  email: "[고객센터 이메일]",
+  email: "ceo@iteron.kr",
   /** 고객센터 전화 */
   tel: "[고객센터 전화]",
   /** 개인정보 보호책임자 */
-  privacyOfficer: "[개인정보 보호책임자 성명]",
+  privacyOfficer: "김채현",
   /** 문서 시행일 */
   effectiveDate: "2026-06-27",
 };

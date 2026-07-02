@@ -47,7 +47,8 @@ export default function Refund() {
         <p>본 규정에 명시되지 않은 사항은 관계 법령 및 회사의 이용약관에 따릅니다.</p>
         <p className="mt-3 text-foreground/80">
           상호: {COMPANY.name} · 대표자: {COMPANY.ceo} · 사업자등록번호: {COMPANY.bizNo}<br />
-          고객센터: {COMPANY.email} / {COMPANY.tel}
+          {COMPANY.address}<br />
+          고객센터: {COMPANY.email}{!COMPANY.tel.startsWith("[") && ` / ${COMPANY.tel}`}
         </p>
       </Section>
     </LegalPage>

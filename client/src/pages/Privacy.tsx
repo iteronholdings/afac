@@ -62,7 +62,7 @@ export default function Privacy() {
 
       <Section title="10. 개인정보 보호책임자">
         <p>· 개인정보 보호책임자: {COMPANY.privacyOfficer}</p>
-        <p>· 연락처: {COMPANY.email} / {COMPANY.tel}</p>
+        <p>· 연락처: {COMPANY.email}{!COMPANY.tel.startsWith("[") && ` / ${COMPANY.tel}`}</p>
         <p>이용자는 개인정보 관련 문의·불만을 위 책임자에게 신고할 수 있으며, 회사는 신속히 답변·처리합니다.</p>
       </Section>
 

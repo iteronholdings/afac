@@ -1,4 +1,5 @@
 import BrandLogo from "@/components/BrandLogo";
+import { COMPANY } from "@/lib/company";
 import { Button } from "@/components/ui/button";
 import {
   ArrowRight,
@@ -293,8 +294,32 @@ export default function Landing() {
             <Link href="/refund" className="text-muted-foreground transition-colors hover:text-foreground">환불규정</Link>
           </nav>
         </div>
-        <div className="border-t border-border/50 py-3 text-center text-xs text-muted-foreground">
-          © {new Date().getFullYear()} ARVEN FACTORY. All rights reserved.
+        <div className="space-y-1.5 border-t border-border/50 py-4 text-center text-xs text-muted-foreground">
+          <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 px-4">
+            <span>상호: {COMPANY.name}</span>
+            <span className="text-border">|</span>
+            <span>대표: {COMPANY.ceo}</span>
+            <span className="text-border">|</span>
+            <span>사업자등록번호: {COMPANY.bizNo}</span>
+            {!COMPANY.mailOrderNo.startsWith("[") && (
+              <>
+                <span className="text-border">|</span>
+                <span>통신판매업: {COMPANY.mailOrderNo}</span>
+              </>
+            )}
+          </p>
+          <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 px-4">
+            <span>{COMPANY.address}</span>
+            <span className="text-border">|</span>
+            <span>고객센터: {COMPANY.email}</span>
+            {!COMPANY.tel.startsWith("[") && (
+              <>
+                <span className="text-border">|</span>
+                <span>{COMPANY.tel}</span>
+              </>
+            )}
+          </p>
+          <p>© {new Date().getFullYear()} {COMPANY.nameEn}. All rights reserved.</p>
         </div>
       </footer>
     </div>
