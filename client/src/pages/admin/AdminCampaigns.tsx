@@ -13,9 +13,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
 import { formatKRW, totalPayout } from "@/lib/workflow";
-import { ImageOff, Megaphone, Pencil, Plus, Trash2, Users } from "lucide-react";
+import { ImageOff, Megaphone, Pencil, Plus, Trash2, Users, Wand2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { useLocation } from "wouter";
 
 const STATUS_META: Record<string, { label: string; badge: string }> = {
   pending:     { label: "승인대기", badge: "bg-yellow-400 text-yellow-900" },
@@ -36,6 +37,7 @@ const BUCKETS = [
 
 export default function AdminCampaigns() {
   const utils = trpc.useUtils();
+  const [, navigate] = useLocation();
   const { data: campaigns, isLoading } = trpc.campaign.listAll.useQuery();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Partial<CampaignFormValue> | null>(null);
@@ -100,9 +102,14 @@ export default function AdminCampaigns() {
       title="캠페인 관리"
       description="체험단·리뷰 캠페인을 등록하고 모집 상태를 관리합니다."
       actions={
-        <Button onClick={openCreate} className="rounded-full">
-          <Plus className="mr-1.5 h-4 w-4" /> 새 캠페인
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="rounded-full bg-card" onClick={() => navigate("/client/campaign/new")}>
+            <Wand2 className="mr-1.5 h-4 w-4" /> 마법사로 등록
+          </Button>
+          <Button onClick={openCreate} className="rounded-full">
+            <Plus className="mr-1.5 h-4 w-4" /> 새 캠페인
+          </Button>
+        </div>
       }
     >
       {/* 상태 대시보드 */}

@@ -346,8 +346,14 @@ export default function CampaignWizard() {
         utils.campaign.myDrafts.invalidate();
       }
       if (autosaveKey) { try { localStorage.removeItem(autosaveKey); } catch { /* 무시 */ } }
-      toast.success("예치금에서 결제되었어요! 관리자 승인 후 캠페인이 시작됩니다 🐻");
-      navigate("/client/campaigns");
+      utils.campaign.listAll.invalidate(); // 관리자 목록 갱신
+      if (isAdmin) {
+        toast.success("캠페인이 등록되어 바로 모집이 시작됐어요! 🛠️");
+        navigate("/admin");
+      } else {
+        toast.success("예치금에서 결제되었어요! 관리자 승인 후 캠페인이 시작됩니다 🐻");
+        navigate("/client/campaigns");
+      }
     },
     onError: (err: unknown) => {
       const msg = err instanceof TRPCClientError ? err.message : "캠페인 신청에 실패했습니다.";
@@ -783,19 +789,27 @@ export default function CampaignWizard() {
                     </div>
                   </div>
 
-                  {/* 예치금 잔액 */}
-                  <div className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-sm ${grandTotal > balance ? "border-destructive/30 bg-destructive/5" : "border-border/70 bg-card"}`}>
-                    <span className="font-medium text-muted-foreground">보유 예치금</span>
-                    <span className={`font-bold ${grandTotal > balance ? "text-destructive" : "text-foreground"}`}>{won(balance)}</span>
-                  </div>
-                  {grandTotal > balance ? (
-                    <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-xs font-semibold text-destructive">
-                      ⚠️ 예치금이 부족합니다. (부족 {won(grandTotal - balance)}) — 운영팀에 충전을 요청해 주세요.
+                  {isAdmin ? (
+                    <div className="rounded-2xl border border-primary/15 bg-primary/10 p-3 text-xs font-medium text-primary">
+                      🛠️ 관리자 등록 — 예치금 차감 없이 <b>바로 모집(open)</b> 상태로 생성됩니다.
                     </div>
                   ) : (
-                    <div className="rounded-2xl border border-primary/15 bg-primary/10 p-3 text-xs font-medium text-primary">
-                      💳 결제하면 예치금에서 {won(grandTotal)}이 차감되고, 관리자 승인 후 캠페인이 시작됩니다.
-                    </div>
+                    <>
+                      {/* 예치금 잔액 */}
+                      <div className={`flex items-center justify-between rounded-2xl border px-4 py-3 text-sm ${grandTotal > balance ? "border-destructive/30 bg-destructive/5" : "border-border/70 bg-card"}`}>
+                        <span className="font-medium text-muted-foreground">보유 예치금</span>
+                        <span className={`font-bold ${grandTotal > balance ? "text-destructive" : "text-foreground"}`}>{won(balance)}</span>
+                      </div>
+                      {grandTotal > balance ? (
+                        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-3 text-xs font-semibold text-destructive">
+                          ⚠️ 예치금이 부족합니다. (부족 {won(grandTotal - balance)}) — 운영팀에 충전을 요청해 주세요.
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-primary/15 bg-primary/10 p-3 text-xs font-medium text-primary">
+                          💳 결제하면 예치금에서 {won(grandTotal)}이 차감되고, 관리자 승인 후 캠페인이 시작됩니다.
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -814,9 +828,9 @@ export default function CampaignWizard() {
                     {zipUploading ? <><Loader2 className="h-4 w-4 animate-spin" /> 업로드 중…</> : <>다음 <ChevronRight className="h-4 w-4" /></>}
                   </Button>
                 ) : (
-                  <Button onClick={submit} disabled={requestMutation.isPending || zipUploading || grandTotal > balance} className="gap-1.5 rounded-full font-bold">
+                  <Button onClick={submit} disabled={requestMutation.isPending || zipUploading || (!isAdmin && grandTotal > balance)} className="gap-1.5 rounded-full font-bold">
                     {requestMutation.isPending || zipUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wallet className="h-4 w-4" />}
-                    {zipUploading ? "사진 업로드 중…" : grandTotal > balance ? "예치금 부족" : `캠페인 결제하기 (${won(grandTotal)})`}
+                    {zipUploading ? "사진 업로드 중…" : isAdmin ? "캠페인 등록하기" : grandTotal > balance ? "예치금 부족" : `캠페인 결제하기 (${won(grandTotal)})`}
                   </Button>
                 )}
               </div>
