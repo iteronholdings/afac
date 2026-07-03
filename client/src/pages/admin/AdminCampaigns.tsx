@@ -275,10 +275,16 @@ export default function AdminCampaigns() {
                         </>
                       )}
                       {c.status === "error" && (
-                        <Button size="sm" className="flex-1" disabled={setStatusMutation.isPending}
-                          onClick={() => setStatusMutation.mutate({ id: c.id, status: "in_progress" })}>
-                          작업 재개
-                        </Button>
+                        <>
+                          <Button size="sm" className="flex-1" disabled={setStatusMutation.isPending}
+                            onClick={() => setStatusMutation.mutate({ id: c.id, status: "in_progress" })}>
+                            작업 재개
+                          </Button>
+                          <Button size="sm" variant="outline" className="flex-1 bg-card" disabled={setStatusMutation.isPending}
+                            onClick={() => setStatusMutation.mutate({ id: c.id, status: "open" })}>
+                            모집 재개
+                          </Button>
+                        </>
                       )}
                       {c.status === "closed" && (
                         <Button size="sm" variant="ghost" className="flex-1" disabled={setStatusMutation.isPending}
