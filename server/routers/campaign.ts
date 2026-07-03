@@ -388,11 +388,14 @@ export const campaignRouter = router({
   request: businessProcedure
     .input(campaignInput)
     .mutation(async ({ ctx, input }) => {
-      // 오늘 시작하는 캠페인은 KST 오후 2시까지만 신청 가능 (모드 무관, 서버 무결성 가드).
-      const kstNow = new Date(Date.now() + 9 * 3600 * 1000);
-      const kstToday = kstNow.toISOString().slice(0, 10);
-      if (input.startDate === kstToday && kstNow.getUTCHours() >= 14) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: "오늘 시작하는 캠페인은 오후 2시까지만 신청할 수 있습니다. 시작일을 내일 이후로 설정해 주세요." });
+      // 오늘 시작하는 캠페인은 KST 오후 2시까지만 신청 가능 (업체 대상, 서버 무결성 가드).
+      // 관리자(운영팀)는 당일 접수 제한 없이 언제든 등록 가능.
+      if (ctx.user.role !== "admin") {
+        const kstNow = new Date(Date.now() + 9 * 3600 * 1000);
+        const kstToday = kstNow.toISOString().slice(0, 10);
+        if (input.startDate === kstToday && kstNow.getUTCHours() >= 14) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "오늘 시작하는 캠페인은 오후 2시까지만 신청할 수 있습니다. 시작일을 내일 이후로 설정해 주세요." });
+        }
       }
 
       const me = await db.getUserById(ctx.user.id);
