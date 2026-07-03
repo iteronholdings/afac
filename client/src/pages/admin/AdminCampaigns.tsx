@@ -43,6 +43,8 @@ export default function AdminCampaigns() {
   const [editing, setEditing] = useState<Partial<CampaignFormValue> | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: number; title: string } | null>(null);
+  /** '모집 마감 → 작업 진행' 전환 확인 다이얼로그 (리뷰어 노출이 끊기므로 실수 방지). */
+  const [progressTarget, setProgressTarget] = useState<{ id: number; title: string } | null>(null);
   const [filter, setFilter] = useState<string | null>(null);
 
   const counts = useMemo(() => {
@@ -252,8 +254,8 @@ export default function AdminCampaigns() {
                     <div className="flex gap-2">
                       {c.status === "open" && (
                         <Button size="sm" className="flex-1" disabled={setStatusMutation.isPending}
-                          onClick={() => setStatusMutation.mutate({ id: c.id, status: "in_progress" })}>
-                          작업 진행
+                          onClick={() => setProgressTarget({ id: c.id, title: c.title })}>
+                          모집 마감 · 작업 진행
                         </Button>
                       )}
                       {c.status === "in_progress" && (
@@ -261,6 +263,10 @@ export default function AdminCampaigns() {
                           <Button size="sm" className="flex-1 bg-emerald-600 hover:bg-emerald-700" disabled={setStatusMutation.isPending}
                             onClick={() => setStatusMutation.mutate({ id: c.id, status: "closed" })}>
                             작업 완료
+                          </Button>
+                          <Button size="sm" variant="outline" className="flex-1 bg-card" disabled={setStatusMutation.isPending}
+                            onClick={() => setStatusMutation.mutate({ id: c.id, status: "open" })}>
+                            모집 재개
                           </Button>
                           <Button size="sm" variant="outline" className="flex-1 bg-card text-destructive hover:bg-destructive/10 hover:text-destructive" disabled={setStatusMutation.isPending}
                             onClick={() => setStatusMutation.mutate({ id: c.id, status: "error" })}>
@@ -325,9 +331,9 @@ export default function AdminCampaigns() {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>캐페인을 삭제할까요?</AlertDialogTitle>
+            <AlertDialogTitle>캠페인을 삭제할까요?</AlertDialogTitle>
             <AlertDialogDescription>
-              <span className="font-medium text-foreground">{deleteTarget?.title}</span> 캐페인과
+              <span className="font-medium text-foreground">{deleteTarget?.title}</span> 캠페인과
               연결된 모든 참여 기록이 함께 삭제되며, 이 작업은 되돌릴 수 없습니다.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -342,6 +348,35 @@ export default function AdminCampaigns() {
               }}
             >
               {deleteMutation.isPending ? "삭제 중..." : "삭제"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 모집 마감 → 작업 진행 확인 (리뷰어 노출이 끊기므로 실수 방지) */}
+      <AlertDialog open={progressTarget !== null} onOpenChange={o => !o && setProgressTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>모집을 마감하고 작업 단계로 전환할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-medium text-foreground">{progressTarget?.title}</span> 캠페인이{" "}
+              <span className="font-semibold text-foreground">리뷰어 캠페인 목록에서 숨겨지고, 새 참여를 받을 수 없게 됩니다.</span>{" "}
+              모집이 아직 안 끝났다면 전환하지 마세요. (전환 후에도 '모집 재개'로 되돌릴 수 있어요)
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={setStatusMutation.isPending}>취소 (모집 유지)</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={setStatusMutation.isPending}
+              onClick={e => {
+                e.preventDefault();
+                if (progressTarget) {
+                  setStatusMutation.mutate({ id: progressTarget.id, status: "in_progress" });
+                  setProgressTarget(null);
+                }
+              }}
+            >
+              모집 마감하고 전환
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
