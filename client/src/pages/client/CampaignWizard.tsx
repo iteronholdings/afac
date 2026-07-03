@@ -1,5 +1,15 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import ClientLayout from "@/components/ClientLayout";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -256,6 +266,8 @@ export default function CampaignWizard() {
   const [zipUploading, setZipUploading] = useState(false);
   /** 업로드한 ZIP의 구조 분석 결과 — 몇 명분으로 나뉘는지 (null=분석 전/실패). */
   const [zipInfo, setZipInfo] = useState<ZipAnalysis | null>(null);
+  /** 사진(ZIP 명분)이 모집 인원보다 적을 때 확인 다이얼로그. null=닫힘. */
+  const [zipShortage, setZipShortage] = useState<{ units: number; need: number } | null>(null);
   const presignZip = trpc.campaign.zipUploadUrl.useMutation();
   const onZipFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -408,9 +420,6 @@ export default function CampaignWizard() {
           toast.error("사진 ZIP에 리뷰어별 폴더 구분이 없어요. 1명 몫씩 폴더로 나눈 뒤 다시 압축해 올려주세요.");
           return false;
         }
-        if (!zipInfo.unstructured && zipInfo.units < photoCnt) {
-          toast.info(`⚠️ ZIP이 ${zipInfo.units}명분인데 사진 리뷰어는 ${photoCnt}명이에요. ${photoCnt - zipInfo.units}명은 사진 없이 진행됩니다.`, { duration: 6000 });
-        }
       }
       if (!data.startDate) { toast.error("시작 날짜를 선택해 주세요."); return false; }
       if (data.startDate < minStartStr(isAdmin)) {
@@ -427,6 +436,12 @@ export default function CampaignWizard() {
         if (data.endDate > plusDays(data.startDate, 9)) { toast.error("기간은 최대 10일까지 설정할 수 있어요."); return false; }
         if (scheduleSum > totalReviewers) { toast.error("인원 배분을 초과합니다."); return false; }
         if (scheduleSum < totalReviewers) { toast.error("인원 배분이 부족합니다. 합계와 맞춰주세요."); return false; }
+      }
+      // 마지막 검증: 사진이 모집 인원보다 적으면 확인 다이얼로그를 띄우고 멈춘다.
+      // (다른 검증을 모두 통과한 뒤라, 다이얼로그에서 '이대로 진행'을 누르면 바로 다음 단계로 이동)
+      if ((data.photoZipKey || data.photoZip) && zipInfo && !zipInfo.unstructured && zipInfo.units < photoCnt) {
+        setZipShortage({ units: zipInfo.units, need: photoCnt });
+        return false;
       }
     }
     return true;
@@ -904,6 +919,37 @@ export default function CampaignWizard() {
           </aside>
         </div>
       </div>
+
+      {/* 사진(ZIP 명분) < 모집 인원 — 고객이 확인해야 다음 단계로 진행 */}
+      <AlertDialog open={!!zipShortage} onOpenChange={o => !o && setZipShortage(null)}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>📷 사진이 모집 인원보다 적어요</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 pt-1 text-sm leading-relaxed">
+                <p>
+                  업로드하신 사진 ZIP은 <b className="text-foreground">{zipShortage?.units}명분</b>인데,
+                  사진 리뷰어 모집 인원은 <b className="text-foreground">{zipShortage?.need}명</b>입니다.
+                </p>
+                <p className="rounded-xl bg-secondary/50 px-3 py-2">
+                  이대로 진행하면 <b className="text-foreground">선착순 {zipShortage?.units}명만 사진을 받고</b>,
+                  나머지 <b className="text-destructive">{zipShortage ? zipShortage.need - zipShortage.units : 0}명은
+                  사진 없이(리뷰 원고만)</b> 진행됩니다.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  모든 리뷰어에게 사진을 전달하려면, 리뷰어별 폴더를 {zipShortage?.need}개로 맞춘 ZIP을 다시 올려주세요.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setZipShortage(null)}>ZIP 다시 올리기</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setZipShortage(null); setStep(s => s + 1); }}>
+              확인했어요, 이대로 진행
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </ClientLayout>
   );
 }
