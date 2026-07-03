@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
+import { analyzeZipFile, type ZipAnalysis } from "@/lib/zipAnalyze";
 import { TRPCClientError } from "@trpc/client";
 import { ArrowLeft, Check, ChevronRight, ImageIcon, Loader2, Upload, Wallet } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -253,6 +254,8 @@ export default function CampaignWizard() {
 
   const zipRef = useRef<HTMLInputElement>(null);
   const [zipUploading, setZipUploading] = useState(false);
+  /** 업로드한 ZIP의 구조 분석 결과 — 몇 명분으로 나뉘는지 (null=분석 전/실패). */
+  const [zipInfo, setZipInfo] = useState<ZipAnalysis | null>(null);
   const presignZip = trpc.campaign.zipUploadUrl.useMutation();
   const onZipFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -261,6 +264,19 @@ export default function CampaignWizard() {
     const isZip = /\.zip$/i.test(file.name) || file.type === "application/zip" || file.type === "application/x-zip-compressed";
     if (!isZip) { toast.error("ZIP(.zip) 파일만 올릴 수 있어요."); return; }
     if (file.size > 2 * 1024 * 1024 * 1024) { toast.error("ZIP은 2GB 이하로 올려주세요."); return; }
+
+    // 업로드 전에 로컬에서 구조 분석 — 몇 명분으로 나뉘는지 즉시 확인 (서버 왕복 없음).
+    setZipInfo(null);
+    void analyzeZipFile(file)
+      .then(info => {
+        setZipInfo(info);
+        if (info.unstructured) {
+          toast.error(`⚠️ 폴더 구분이 없어 통째로 1명분으로 인식돼요! 리뷰어별 폴더로 나눠 다시 압축해 주세요. (사진 ${info.files}장)`, { duration: 8000 });
+        } else {
+          toast.success(`📦 ${info.units}명분으로 인식됐어요 (사진 ${info.files}장)`);
+        }
+      })
+      .catch(() => setZipInfo(null));
 
     // R2로 직접 업로드 (presigned PUT) — base64 64MB 한계 우회.
     // 스토리지 미설정 등으로 presign 실패 시 기존 base64 경로(≤45MB)로 폴백.
@@ -385,6 +401,17 @@ export default function CampaignWizard() {
     }
     if (step === 1) {
       if (totalReviewers < 1) { toast.error("모집 인원을 1명 이상 입력해 주세요."); return false; }
+      // 사진 ZIP 구조 검증: 폴더 구분 없이 통짜면(2명 이상 모집 시) 진행 차단 — 1명에게 몽땅 가는 사고 방지.
+      const photoCnt = Number(data.photoCount) || 0;
+      if ((data.photoZipKey || data.photoZip) && zipInfo) {
+        if (zipInfo.unstructured && photoCnt > 1) {
+          toast.error("사진 ZIP에 리뷰어별 폴더 구분이 없어요. 1명 몫씩 폴더로 나눈 뒤 다시 압축해 올려주세요.");
+          return false;
+        }
+        if (!zipInfo.unstructured && zipInfo.units < photoCnt) {
+          toast.info(`⚠️ ZIP이 ${zipInfo.units}명분인데 사진 리뷰어는 ${photoCnt}명이에요. ${photoCnt - zipInfo.units}명은 사진 없이 진행됩니다.`, { duration: 6000 });
+        }
+      }
       if (!data.startDate) { toast.error("시작 날짜를 선택해 주세요."); return false; }
       if (data.startDate < minStartStr(isAdmin)) {
         if (data.startDate === todayStr()) {
@@ -631,11 +658,32 @@ export default function CampaignWizard() {
                           <span className="flex-1 truncate text-sm font-medium text-foreground">업로드 중… 잠시만 기다려 주세요</span>
                         </div>
                       ) : (data.photoZipKey || data.photoZip) ? (
-                        <div className="flex items-center gap-3 rounded-xl border border-border/70 bg-card px-3 py-2.5">
-                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-base">🗜️</span>
-                          <span className="flex-1 truncate text-sm font-medium text-foreground">{data.photoZipName}</span>
-                          <button type="button" onClick={() => zipRef.current?.click()} className="shrink-0 text-xs font-semibold text-primary hover:underline">변경</button>
-                          <button type="button" onClick={() => setData(prev => ({ ...prev, photoZip: "", photoZipName: "", photoZipKey: "" }))} className="shrink-0 text-xs font-semibold text-muted-foreground hover:text-destructive">삭제</button>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3 rounded-xl border border-border/70 bg-card px-3 py-2.5">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-base">🗜️</span>
+                            <span className="flex-1 truncate text-sm font-medium text-foreground">{data.photoZipName}</span>
+                            <button type="button" onClick={() => zipRef.current?.click()} className="shrink-0 text-xs font-semibold text-primary hover:underline">변경</button>
+                            <button type="button" onClick={() => { setZipInfo(null); setData(prev => ({ ...prev, photoZip: "", photoZipName: "", photoZipKey: "" })); }} className="shrink-0 text-xs font-semibold text-muted-foreground hover:text-destructive">삭제</button>
+                          </div>
+                          {/* ZIP 구조 분석 결과 — 몇 명분으로 나뉘는지 즉시 표시 */}
+                          {zipInfo && (
+                            zipInfo.unstructured ? (
+                              <div className="rounded-xl border border-destructive/40 bg-destructive/5 px-3 py-2.5 text-xs">
+                                <p className="font-bold text-destructive">⚠️ 폴더 구분이 없어 통째로 1명분으로 인식돼요 (사진 {zipInfo.files}장)</p>
+                                <p className="mt-1 text-muted-foreground">
+                                  리뷰어 1명 몫씩 <b className="text-foreground">폴더로 나눈 뒤</b> 전체를 압축해서 다시 올려주세요.<br />
+                                  예: <span className="font-mono">통합.zip → 리뷰어1/사진들, 리뷰어2/사진들, …</span>
+                                </p>
+                              </div>
+                            ) : (
+                              <div className="rounded-xl border border-emerald-300/60 bg-emerald-50 px-3 py-2.5 text-xs">
+                                <p className="font-bold text-emerald-700">📦 {zipInfo.units}명분으로 인식됐어요 (사진 {zipInfo.files}장)</p>
+                                <p className="mt-0.5 truncate text-muted-foreground">
+                                  {zipInfo.names.join(", ")}{zipInfo.units > zipInfo.names.length ? ` 외 ${zipInfo.units - zipInfo.names.length}개` : ""}
+                                </p>
+                              </div>
+                            )
+                          )}
                         </div>
                       ) : (
                         <button type="button" onClick={() => zipRef.current?.click()}
