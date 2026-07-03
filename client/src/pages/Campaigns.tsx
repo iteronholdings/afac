@@ -13,11 +13,24 @@ import {
 import { trpc } from "@/lib/trpc";
 import { formatKRW, totalPayout } from "@/lib/workflow";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, ImageIcon, Search, Sparkles, Users } from "lucide-react";
+import { CalendarDays, CheckCircle2, ImageIcon, Search, Sparkles, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
+
+/** schedule JSON({날짜:인원})에 유효 날짜가 있으면 배분 캠페인. 오늘 정원을 반환. */
+function todaySchedule(scheduleJson?: string | null) {
+  if (!scheduleJson) return null;
+  let s: Record<string, number>;
+  try { s = JSON.parse(scheduleJson); } catch { return null; }
+  const hasDates = Object.values(s).some(n => Number(n) > 0);
+  if (!hasDates) return null;
+  const d = new Date();
+  const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return { today, todayCap: Number(s[today]) || 0 };
+}
+const mmdd = (s: string) => s.slice(5).replace("-", "/");
 
 export default function Campaigns() {
   const { isAuthenticated, loading: authLoading, user } = useAuth();
@@ -199,12 +212,35 @@ export default function Campaigns() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 shrink-0 text-primary" />
-                  <span className="text-muted-foreground">
-                    모집 {selected.taken}/{selected.slots}명 · 잔여 {selected.remaining}자리
-                  </span>
-                </div>
+                {(() => {
+                  const sch = todaySchedule(selected.schedule);
+                  if (sch) {
+                    // 배분 캠페인: 오늘 배분된 인원만 참여 가능 (미래 날짜 선점 불가).
+                    const todayTaken = Math.max(0, sch.todayCap - selected.remaining);
+                    return (
+                      <div className="rounded-xl border border-primary/30 bg-primary/5 p-3">
+                        <p className="flex items-center gap-1.5 text-sm font-bold text-primary">
+                          <CalendarDays className="h-4 w-4" /> 날짜별 모집 캠페인
+                        </p>
+                        <p className="mt-1 text-sm text-foreground">
+                          오늘 <b>{mmdd(sch.today)}</b> 모집 · 오늘 정원 {sch.todayCap}명 중 <b className="text-primary">잔여 {selected.remaining}자리</b>
+                          <span className="ml-1 text-xs text-muted-foreground">({todayTaken}/{sch.todayCap}명)</span>
+                        </p>
+                        <p className="mt-1 text-[11px] text-muted-foreground">
+                          ※ 오늘 배분된 인원만 참여할 수 있어요. 참여한 날이 곧 진행일이라, 미리 날짜를 잡아둘 수 없습니다.
+                        </p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 shrink-0 text-primary" />
+                      <span className="text-muted-foreground">
+                        모집 {selected.taken}/{selected.slots}명 · 잔여 {selected.remaining}자리
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {selected.description && (

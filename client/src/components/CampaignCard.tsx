@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { formatKRW, totalPayout } from "@/lib/workflow";
-import { ImageIcon, Search, Users } from "lucide-react";
+import { CalendarDays, ImageIcon, Search, Users } from "lucide-react";
 
 export type CampaignCardData = {
   id: number;
@@ -14,7 +14,15 @@ export type CampaignCardData = {
   taken: number;
   remaining: number;
   status: string;
+  schedule?: string | null;
 };
+
+/** 배분(날짜별) 캠페인 여부 — schedule에 유효 날짜가 있으면 true. */
+function isDistribute(scheduleJson?: string | null): boolean {
+  if (!scheduleJson) return false;
+  try { return Object.values(JSON.parse(scheduleJson) as Record<string, number>).some(n => Number(n) > 0); }
+  catch { return false; }
+}
 
 export default function CampaignCard({
   campaign,
@@ -70,9 +78,14 @@ export default function CampaignCard({
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
           <Search className="h-3.5 w-3.5 shrink-0 text-primary" />
           <span className="truncate">{campaign.keyword}</span>
+          {isDistribute(campaign.schedule) && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-bold text-primary">
+              <CalendarDays className="h-3 w-3" /> 오늘 모집
+            </span>
+          )}
         </div>
 
         {/* 모집 현황 — 핵심 정보 */}
