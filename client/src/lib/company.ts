@@ -15,7 +15,7 @@ export const COMPANY = {
   /** 사업장 주소 */
   address: "부산광역시 해운대구 반여로 96, 2층 S79호 (반여동, 영풍빌딩)",
   /** 고객센터 이메일 */
-  email: "ceo@iteron.kr",
+  email: "arvenfac@gmail.com",
   /** 고객센터 전화 */
   tel: "010-2869-6449",
   /** 개인정보 보호책임자 */
