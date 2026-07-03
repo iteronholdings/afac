@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import CampaignCard from "@/components/CampaignCard";
+import RecruitScheduleInfo from "@/components/RecruitScheduleInfo";
 import SiteHeader from "@/components/SiteHeader";
 import WorkflowStepper from "@/components/WorkflowStepper";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,6 @@ import {
   ImageIcon,
   Search,
   Sparkles,
-  Users,
   Wallet,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -260,12 +260,13 @@ export default function Home() {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 shrink-0 text-primary" />
-                  <span className="text-muted-foreground">
-                    모집 {selected.taken}/{selected.slots}명 · 잔여 {selected.remaining}자리
-                  </span>
-                </div>
+                <RecruitScheduleInfo
+                  schedule={selected.schedule}
+                  takenByDate={selected.takenByDate}
+                  taken={selected.taken}
+                  slots={selected.slots}
+                  remaining={selected.remaining}
+                />
               </div>
 
               {selected.description && (

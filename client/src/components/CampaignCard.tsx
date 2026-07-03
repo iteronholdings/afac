@@ -95,6 +95,12 @@ export default function CampaignCard({
               <Users className="h-4 w-4 text-primary" />
               {soldOut ? (
                 <span className="text-muted-foreground">모집 마감</span>
+              ) : isDistribute(campaign.schedule) ? (
+                <>
+                  <span className="text-muted-foreground">오늘</span>
+                  <span className="text-primary font-bold">{campaign.remaining}자리</span>
+                  <span className="text-muted-foreground">남음</span>
+                </>
               ) : (
                 <>
                   <span className="text-primary font-bold">{campaign.remaining}자리</span>

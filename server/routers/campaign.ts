@@ -221,7 +221,12 @@ export async function assignPacketsForCampaign(
  */
 async function listOpenForReviewers() {
   const rows = await db.listCampaigns({ onlyOpen: true });
-  type Row = Omit<typeof rows[number], "photoGuideZip"> & { taken: number; remaining: number };
+  type Row = Omit<typeof rows[number], "photoGuideZip"> & {
+    taken: number;
+    remaining: number;
+    /** 배분 캠페인: 날짜별 이미 배정된 인원 (리뷰어 화면 모집 캘린더용). */
+    takenByDate?: Record<string, number>;
+  };
   const result: Row[] = [];
   for (const c of rows) {
     const parts = await db.listParticipationsByCampaign(c.id);
@@ -231,8 +236,14 @@ async function listOpenForReviewers() {
     const { photoGuideZip: _zip, ...light } = c;
     if (dist.isDistribute) {
       if (!dist.joinable) continue; // 오늘 모집 아님/오늘 마감 → 숨김
+      const takenByDate: Record<string, number> = {};
+      for (const p of parts) {
+        if (p.status !== "rejected" && p.assignedDate) {
+          takenByDate[p.assignedDate] = (takenByDate[p.assignedDate] || 0) + 1;
+        }
+      }
       const todayRemaining = Math.max(0, dist.todayCap - dist.todayTaken);
-      result.push({ ...light, taken, remaining: Math.min(todayRemaining, Math.max(0, c.slots - taken)) });
+      result.push({ ...light, taken, remaining: Math.min(todayRemaining, Math.max(0, c.slots - taken)), takenByDate });
     } else {
       result.push({ ...light, taken, remaining: Math.max(0, c.slots - taken) });
     }
