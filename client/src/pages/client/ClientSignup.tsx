@@ -1,3 +1,4 @@
+import PrivacyConsent from "@/components/PrivacyConsent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,7 @@ export default function ClientSignup() {
   const [form, setForm] = useState<FormState>({
     loginId: "", password: "", passwordConfirm: "", fullName: "", phone: "",
   });
+  const [privacyAgreed, setPrivacyAgreed] = useState(false);
 
   const signupMutation = trpc.auth.signup.useMutation({
     onSuccess: async () => {
@@ -50,6 +52,10 @@ export default function ClientSignup() {
     }
     if (form.password !== form.passwordConfirm) {
       toast.error("비밀번호가 일치하지 않습니다.");
+      return;
+    }
+    if (!privacyAgreed) {
+      toast.error("개인정보처리방침에 동의해 주세요.");
       return;
     }
     signupMutation.mutate({
@@ -112,7 +118,9 @@ export default function ClientSignup() {
             </div>
           </div>
 
-          <Button type="submit" className="h-11 w-full text-base font-semibold" disabled={signupMutation.isPending}>
+          <PrivacyConsent checked={privacyAgreed} onChange={setPrivacyAgreed} />
+
+          <Button type="submit" className="h-11 w-full text-base font-semibold" disabled={signupMutation.isPending || !privacyAgreed}>
             {signupMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             업체로 가입하기
           </Button>

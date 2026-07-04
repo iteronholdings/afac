@@ -1,4 +1,5 @@
 import AuthLayout from "@/components/AuthLayout";
+import PrivacyConsent from "@/components/PrivacyConsent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +28,7 @@ export default function Signup() {
     loginId: "", password: "", passwordConfirm: "", fullName: "", phone: "",
     bankName: "", bankAccount: "", bankHolder: "",
   });
+  const [privacyAgreed, setPrivacyAgreed] = useState(false);
 
   const signupMutation = trpc.auth.signup.useMutation({
     onSuccess: async () => {
@@ -59,6 +61,10 @@ export default function Signup() {
     }
     if (!form.bankName || !form.bankAccount || !form.bankHolder) {
       toast.error("계좌 정보를 모두 입력해 주세요.");
+      return;
+    }
+    if (!privacyAgreed) {
+      toast.error("개인정보처리방침에 동의해 주세요.");
       return;
     }
     signupMutation.mutate({
@@ -145,7 +151,9 @@ export default function Signup() {
           </div>
         </div>
 
-        <Button type="submit" className="mt-2 h-11 w-full text-base font-semibold" disabled={signupMutation.isPending}>
+        <PrivacyConsent checked={privacyAgreed} onChange={setPrivacyAgreed} />
+
+        <Button type="submit" className="mt-2 h-11 w-full text-base font-semibold" disabled={signupMutation.isPending || !privacyAgreed}>
           {signupMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           리뷰어로 가입하기
         </Button>
