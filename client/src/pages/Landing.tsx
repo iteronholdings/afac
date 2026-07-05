@@ -1,4 +1,5 @@
 import BrandLogo from "@/components/BrandLogo";
+import KakaoInquiryButton from "@/components/KakaoInquiryButton";
 import { COMPANY } from "@/lib/company";
 import { Button } from "@/components/ui/button";
 import {
@@ -273,6 +274,7 @@ export default function Landing() {
                   업체 로그인
                 </Button>
               </Link>
+              <KakaoInquiryButton label="카카오톡 문의하기" className="h-11 px-7 text-base" />
             </div>
           </div>
         </div>
@@ -288,11 +290,14 @@ export default function Landing() {
               <ShieldCheck className="h-3.5 w-3.5 text-primary" /> 어뷰징 0% · 평생 A/S · 세금계산서 발행
             </p>
           </div>
-          <nav className="flex items-center gap-4 text-sm font-medium">
-            <Link href="/privacy" className="text-muted-foreground transition-colors hover:text-foreground">개인정보처리방침</Link>
-            <span className="text-border">|</span>
-            <Link href="/refund" className="text-muted-foreground transition-colors hover:text-foreground">환불규정</Link>
-          </nav>
+          <div className="flex flex-col items-start gap-3 sm:items-end">
+            <KakaoInquiryButton size="sm" label="카카오톡 문의하기" />
+            <nav className="flex items-center gap-4 text-sm font-medium">
+              <Link href="/privacy" className="text-muted-foreground transition-colors hover:text-foreground">개인정보처리방침</Link>
+              <span className="text-border">|</span>
+              <Link href="/refund" className="text-muted-foreground transition-colors hover:text-foreground">환불규정</Link>
+            </nav>
+          </div>
         </div>
         <div className="space-y-1.5 border-t border-border/50 py-4 text-center text-xs text-muted-foreground">
           <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 px-4">
