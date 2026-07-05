@@ -356,3 +356,29 @@ export const businessMessages = mysqlTable("business_messages", {
 
 export type BusinessMessage = typeof businessMessages.$inferSelect;
 export type InsertBusinessMessage = typeof businessMessages.$inferInsert;
+
+/**
+ * 회원가입 전화번호 인증 코드. 전화번호(숫자만)당 1행 — 재발송 시 갱신.
+ * 남발 방지: 1분 재발송 제한 + 하루 발송 횟수 제한 + 검증 5회 제한.
+ */
+export const phoneVerifications = mysqlTable("phone_verifications", {
+  /** 전화번호(숫자만, 예: 01012345678). */
+  phone: varchar("phone", { length: 20 }).primaryKey(),
+  /** 6자리 인증 코드. */
+  code: varchar("code", { length: 6 }).notNull(),
+  /** 코드 만료 시각(발송 +5분). */
+  expiresAt: timestamp("expiresAt").notNull(),
+  /** 인증 성공 시각. null = 미인증. */
+  verifiedAt: timestamp("verifiedAt"),
+  /** 현재 코드에 대한 검증 시도 횟수(5회 초과 시 재발송 필요). */
+  attempts: int("attempts").notNull().default(0),
+  /** 마지막 발송 시각(1분 재발송 제한용). */
+  lastSentAt: timestamp("lastSentAt"),
+  /** 발송 횟수 집계 기준일(YYYY-MM-DD). */
+  sentDate: varchar("sentDate", { length: 10 }),
+  /** 기준일 내 발송 횟수(하루 5회 제한). */
+  sentCount: int("sentCount").notNull().default(0),
+});
+
+export type PhoneVerification = typeof phoneVerifications.$inferSelect;
+export type InsertPhoneVerification = typeof phoneVerifications.$inferInsert;

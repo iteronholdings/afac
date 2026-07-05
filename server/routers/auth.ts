@@ -5,7 +5,15 @@ import { z } from "zod";
 import * as db from "../db";
 import { getSessionCookieOptions } from "../_core/cookies";
 import { sdk } from "../_core/sdk";
+import { isSmsConfigured, normalizePhone, sendSms } from "../sms";
 import { protectedProcedure, publicProcedure, router } from "../_core/trpc";
+
+/** 인증 성공 후 이 시간(ms) 안에 가입해야 유효. */
+const PHONE_VERIFY_WINDOW_MS = 30 * 60 * 1000; // 30분
+const CODE_TTL_MS = 5 * 60 * 1000;             // 코드 유효 5분
+const RESEND_COOLDOWN_MS = 60 * 1000;          // 재발송 1분 제한
+const DAILY_SEND_LIMIT = 5;                    // 번호당 하루 5회
+const MAX_VERIFY_ATTEMPTS = 5;                 // 코드당 검증 5회
 
 const loginIdSchema = z
   .string()
@@ -60,6 +68,70 @@ export const authRouter = router({
     return safeUser;
   }),
 
+  /** 전화번호 인증 활성 여부 (솔라피 키가 있어야 켜짐 — 없으면 기존 가입 방식). */
+  smsConfig: publicProcedure.query(() => ({
+    phoneVerificationEnabled: isSmsConfigured(),
+  })),
+
+  /** 인증번호 발송. 남발 방지: 1분 재발송 제한 + 번호당 하루 5회. */
+  sendPhoneCode: publicProcedure
+    .input(z.object({ phone: phoneSchema }))
+    .mutation(async ({ input }) => {
+      if (!isSmsConfigured()) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "전화번호 인증이 아직 설정되지 않았습니다." });
+      }
+      const phone = normalizePhone(input.phone);
+      if (!/^01[016789]\d{7,8}$/.test(phone)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "올바른 휴대폰 번호를 입력해 주세요." });
+      }
+
+      const now = new Date();
+      const today = now.toISOString().slice(0, 10);
+      const rec = await db.getPhoneVerification(phone);
+      if (rec?.lastSentAt && now.getTime() - new Date(rec.lastSentAt).getTime() < RESEND_COOLDOWN_MS) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "잠시 후 다시 시도해 주세요. (재발송은 1분에 1회)" });
+      }
+      const sentToday = rec?.sentDate === today ? rec.sentCount : 0;
+      if (sentToday >= DAILY_SEND_LIMIT) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "오늘 발송 한도를 초과했습니다. 내일 다시 시도해 주세요." });
+      }
+
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      await db.upsertPhoneVerification({
+        phone,
+        code,
+        expiresAt: new Date(now.getTime() + CODE_TTL_MS),
+        verifiedAt: null,
+        attempts: 0,
+        lastSentAt: now,
+        sentDate: today,
+        sentCount: sentToday + 1,
+      });
+      await sendSms(phone, `[아르벤팩토리] 인증번호 [${code}] 를 입력해 주세요. (5분 유효)`);
+      return { success: true as const };
+    }),
+
+  /** 인증번호 확인. 5회 초과 시 재발송 필요. */
+  verifyPhoneCode: publicProcedure
+    .input(z.object({ phone: phoneSchema, code: z.string().trim().length(6, "인증번호 6자리를 입력해 주세요.") }))
+    .mutation(async ({ input }) => {
+      const phone = normalizePhone(input.phone);
+      const rec = await db.getPhoneVerification(phone);
+      const now = new Date();
+      if (!rec || now > new Date(rec.expiresAt)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "인증번호가 만료됐어요. 다시 발송해 주세요." });
+      }
+      if (rec.attempts >= MAX_VERIFY_ATTEMPTS) {
+        throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: "시도 횟수를 초과했어요. 인증번호를 다시 발송해 주세요." });
+      }
+      if (rec.code !== input.code.trim()) {
+        await db.updatePhoneVerification(phone, { attempts: rec.attempts + 1 });
+        throw new TRPCError({ code: "BAD_REQUEST", message: "인증번호가 올바르지 않습니다." });
+      }
+      await db.updatePhoneVerification(phone, { verifiedAt: now });
+      return { success: true as const };
+    }),
+
   // Register a new reviewer member with ID / PW / name / phone
   signup: publicProcedure
     .input(
@@ -75,6 +147,16 @@ export const authRouter = router({
       })
     )
     .mutation(async ({ ctx, input }) => {
+      // 전화번호 인증이 활성화돼 있으면, 최근 30분 내 인증된 번호만 가입 허용.
+      if (isSmsConfigured()) {
+        const rec = await db.getPhoneVerification(normalizePhone(input.phone));
+        const fresh = rec?.verifiedAt
+          && Date.now() - new Date(rec.verifiedAt).getTime() < PHONE_VERIFY_WINDOW_MS;
+        if (!fresh) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "전화번호 인증을 완료해 주세요." });
+        }
+      }
+
       const existing = await db.getUserByLoginId(input.loginId);
       if (existing) {
         throw new TRPCError({

@@ -1,11 +1,12 @@
 import AuthLayout from "@/components/AuthLayout";
+import PhoneVerifyInput from "@/components/PhoneVerifyInput";
 import PrivacyConsent from "@/components/PrivacyConsent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
-import { CreditCard, IdCard, Loader2, Lock, Phone, User } from "lucide-react";
+import { CreditCard, IdCard, Loader2, Lock, User } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
@@ -29,6 +30,9 @@ export default function Signup() {
     bankName: "", bankAccount: "", bankHolder: "",
   });
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
+  const [phoneVerified, setPhoneVerified] = useState(false);
+  const { data: smsCfg } = trpc.auth.smsConfig.useQuery();
+  const smsEnabled = smsCfg?.phoneVerificationEnabled ?? false;
 
   const signupMutation = trpc.auth.signup.useMutation({
     onSuccess: async () => {
@@ -61,6 +65,10 @@ export default function Signup() {
     }
     if (!form.bankName || !form.bankAccount || !form.bankHolder) {
       toast.error("계좌 정보를 모두 입력해 주세요.");
+      return;
+    }
+    if (smsEnabled && !phoneVerified) {
+      toast.error("전화번호 인증을 완료해 주세요.");
       return;
     }
     if (!privacyAgreed) {
@@ -125,13 +133,12 @@ export default function Signup() {
           </div>
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="phone">전화번호</Label>
-          <div className="relative">
-            <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input id="phone" type="tel" autoComplete="tel" placeholder="예: 010-1234-5678" value={form.phone} onChange={update("phone")} className="h-11 pl-9" />
-          </div>
-        </div>
+        <PhoneVerifyInput
+          phone={form.phone}
+          onPhoneChange={v => setForm(prev => ({ ...prev, phone: v }))}
+          verified={phoneVerified}
+          onVerifiedChange={setPhoneVerified}
+        />
 
         <div className="space-y-3 rounded-2xl border border-border/70 bg-secondary/30 p-4">
           <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">

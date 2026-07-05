@@ -20,6 +20,7 @@ import {
   InsertUser,
   messages,
   participations,
+  phoneVerifications,
   pushSubscriptions,
   users,
 } from "../drizzle/schema";
@@ -92,6 +93,23 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
   }
 
   // Create tables that may not exist yet (idempotent).
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS phone_verifications (
+        phone VARCHAR(20) PRIMARY KEY,
+        code VARCHAR(6) NOT NULL,
+        expiresAt TIMESTAMP NOT NULL,
+        verifiedAt TIMESTAMP NULL,
+        attempts INT NOT NULL DEFAULT 0,
+        lastSentAt TIMESTAMP NULL,
+        sentDate VARCHAR(10),
+        sentCount INT NOT NULL DEFAULT 0
+      )
+    `);
+  } catch (e) {
+    console.warn("[Migration] phone_verifications table:", e);
+  }
+
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS consulting_requests (
@@ -1024,4 +1042,33 @@ export async function countUnreadMessages(participationId: number, viewerId: num
       )
     );
   return rows.filter(r => r.senderId !== viewerId).length;
+}
+
+// === 전화번호 인증 (회원가입 SMS) ===
+
+export async function getPhoneVerification(phone: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db
+    .select()
+    .from(phoneVerifications)
+    .where(eq(phoneVerifications.phone, phone))
+    .limit(1);
+  return rows.length > 0 ? rows[0] : undefined;
+}
+
+/** 인증 코드 발송 기록 저장 (전화번호당 1행 — 있으면 갱신). */
+export async function upsertPhoneVerification(data: typeof phoneVerifications.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(phoneVerifications).values(data).onDuplicateKeyUpdate({ set: { ...data } });
+}
+
+export async function updatePhoneVerification(
+  phone: string,
+  data: Partial<typeof phoneVerifications.$inferInsert>,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(phoneVerifications).set(data).where(eq(phoneVerifications.phone, phone));
 }
