@@ -22,4 +22,6 @@ export const COMPANY = {
   privacyOfficer: "김채현",
   /** 문서 시행일 */
   effectiveDate: "2026-06-27",
+  /** 카카오톡 채널 (고객 문의 창구) */
+  kakaoChannel: "https://pf.kakao.com/_AwcPX",
 };

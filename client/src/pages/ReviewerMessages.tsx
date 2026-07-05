@@ -1,9 +1,9 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import KakaoInquiryButton from "@/components/KakaoInquiryButton";
 import SiteHeader from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { Building2, Loader2, MessageCircle, Send } from "lucide-react";
+import { Building2, Loader2, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -16,36 +16,6 @@ function Bubble({ mine, name, content, imageUrl, at }: { mine: boolean; name: st
         {imageUrl && <img src={imageUrl} alt="첨부" className="mt-1 max-w-full cursor-pointer rounded-xl" onClick={() => window.open(imageUrl, "_blank")} />}
       </div>
       <span className="px-1 text-[10px] text-muted-foreground/60">{new Date(at).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" })}</span>
-    </div>
-  );
-}
-
-/** 운영팀 문의: 리뷰어 ↔ 운영팀 (단일 스레드) */
-function OpsTab() {
-  const { user } = useAuth();
-  const utils = trpc.useUtils();
-  const { data: msgs = [] } = trpc.directMessage.list.useQuery({ reviewerId: undefined }, { refetchInterval: 4000 });
-  const [text, setText] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const markRead = trpc.directMessage.markRead.useMutation({ onSuccess: () => utils.directMessage.unreadCount.invalidate() });
-  const send = trpc.directMessage.send.useMutation({ onSuccess: () => { setText(""); utils.directMessage.list.invalidate(); }, onError: e => toast.error(e.message) });
-  useEffect(() => { markRead.mutate({}); /* eslint-disable-next-line */ }, [msgs.length]);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs.length]);
-  const submit = () => { if (!text.trim()) return; send.mutate({ content: text.trim() }); };
-  return (
-    <div className="flex h-[64vh] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card">
-      <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3 font-bold text-foreground"><MessageCircle className="h-4 w-4 text-primary" /> 운영팀과의 대화</div>
-      <div className="flex-1 space-y-3 overflow-y-auto bg-muted/20 px-4 py-4">
-        {msgs.length === 0 ? <p className="py-10 text-center text-sm text-muted-foreground">운영팀에 궁금한 점을 남겨보세요.</p>
-          : msgs.map(m => <Bubble key={m.id} mine={m.fromUserId === user?.id} name={m.fromUserId === user?.id ? "나" : `운영팀 · ${m.senderName}`} content={m.content} imageUrl={m.imageUrl} at={m.createdAt} />)}
-        <div ref={bottomRef} />
-      </div>
-      <div className="shrink-0 border-t border-border/60 p-3">
-        <div className="flex items-end gap-2">
-          <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} placeholder="운영팀에 문의..." rows={1} className="max-h-32 flex-1 resize-none rounded-xl border border-border/70 bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
-          <Button onClick={submit} disabled={!text.trim() || send.isPending} className="gap-1.5 rounded-xl font-bold">{send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} 전송</Button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -115,16 +85,17 @@ export default function ReviewerMessages() {
     <div className="min-h-screen bg-gradient-to-b from-secondary/40 to-background">
       <SiteHeader />
       <main className="container max-w-5xl py-8 pb-28">
-        <h1 className="mb-1 text-2xl font-bold text-foreground">메시지</h1>
-        <p className="mb-5 text-sm text-muted-foreground">운영팀·업체와의 대화를 확인하고 답장하세요.</p>
-        <Tabs defaultValue="ops" className="space-y-4">
-          <TabsList className="w-fit">
-            <TabsTrigger value="ops">운영팀 문의</TabsTrigger>
-            <TabsTrigger value="biz">업체 문의</TabsTrigger>
-          </TabsList>
-          <TabsContent value="ops"><OpsTab /></TabsContent>
-          <TabsContent value="biz"><BizTab /></TabsContent>
-        </Tabs>
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="mb-1 text-2xl font-bold text-foreground">메시지</h1>
+            <p className="text-sm text-muted-foreground">업체와의 대화를 확인하고 답장하세요.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">운영팀(관리자) 문의는 카카오 채널로!</span>
+            <KakaoInquiryButton size="sm" />
+          </div>
+        </div>
+        <BizTab />
       </main>
     </div>
   );

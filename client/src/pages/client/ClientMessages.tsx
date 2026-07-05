@@ -1,9 +1,9 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import ClientLayout from "@/components/ClientLayout";
+import KakaoInquiryButton from "@/components/KakaoInquiryButton";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { Loader2, MessageCircle, Send, UserRound } from "lucide-react";
+import { Loader2, Send, UserRound } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -85,51 +85,14 @@ function ReviewerTab() {
   );
 }
 
-/** 운영팀 문의: 업체 ↔ 운영팀 (단일 스레드) */
-function OpsTab() {
-  const { user } = useAuth();
-  const utils = trpc.useUtils();
-  const { data: msgs = [] } = trpc.directMessage.list.useQuery({ reviewerId: undefined }, { refetchInterval: 4000 });
-  const [text, setText] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const markRead = trpc.directMessage.markRead.useMutation({ onSuccess: () => utils.directMessage.unreadCount.invalidate() });
-  const send = trpc.directMessage.send.useMutation({ onSuccess: () => { setText(""); utils.directMessage.list.invalidate(); }, onError: e => toast.error(e.message) });
-
-  useEffect(() => { markRead.mutate({}); /* eslint-disable-next-line */ }, [msgs.length]);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs.length]);
-  const submit = () => { if (!text.trim()) return; send.mutate({ content: text.trim() }); };
-
-  return (
-    <div className="flex h-[64vh] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card">
-      <div className="flex items-center gap-2 border-b border-border/60 px-4 py-3 font-bold text-foreground">
-        <MessageCircle className="h-4 w-4 text-primary" /> 운영팀과의 대화
-      </div>
-      <div className="flex-1 space-y-3 overflow-y-auto bg-muted/20 px-4 py-4">
-        {msgs.length === 0 ? <p className="py-10 text-center text-sm text-muted-foreground">운영팀에 궁금한 점을 남겨보세요.</p>
-          : msgs.map(m => <Bubble key={m.id} mine={m.fromUserId === user?.id} name={m.fromUserId === user?.id ? "나" : `운영팀 · ${m.senderName}`} content={m.content} imageUrl={m.imageUrl} at={m.createdAt} />)}
-        <div ref={bottomRef} />
-      </div>
-      <div className="shrink-0 border-t border-border/60 p-3">
-        <div className="flex items-end gap-2">
-          <textarea value={text} onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }} placeholder="운영팀에 문의..." rows={1} className="max-h-32 flex-1 resize-none rounded-xl border border-border/70 bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/30" />
-          <Button onClick={submit} disabled={!text.trim() || send.isPending} className="gap-1.5 rounded-xl font-bold">{send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} 전송</Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function ClientMessages() {
   return (
-    <ClientLayout title="메시지" description="리뷰어·운영팀과의 대화를 확인하고 답장하세요.">
-      <Tabs defaultValue="reviewer" className="space-y-4">
-        <TabsList className="w-fit">
-          <TabsTrigger value="reviewer">리뷰어 문의</TabsTrigger>
-          <TabsTrigger value="ops">운영팀 문의</TabsTrigger>
-        </TabsList>
-        <TabsContent value="reviewer"><ReviewerTab /></TabsContent>
-        <TabsContent value="ops"><OpsTab /></TabsContent>
-      </Tabs>
+    <ClientLayout title="메시지" description="리뷰어와의 대화를 확인하고 답장하세요.">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border/70 bg-card px-4 py-3">
+        <span className="text-sm text-muted-foreground">운영팀(관리자) 문의는 카카오톡 채널에서 받고 있어요.</span>
+        <KakaoInquiryButton size="sm" />
+      </div>
+      <ReviewerTab />
     </ClientLayout>
   );
 }

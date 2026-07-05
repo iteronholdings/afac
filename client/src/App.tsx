@@ -1,6 +1,5 @@
 import ChatNotifier from "@/components/ChatNotifier";
 import PushPrompt from "@/components/PushPrompt";
-import FloatingChat from "@/components/FloatingChat";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
@@ -154,7 +153,6 @@ function App() {
         <TooltipProvider>
           <Toaster position="top-center" richColors />
           <Router />
-          <FloatingChat />
           <ChatNotifier />
           <PushPrompt />
         </TooltipProvider>

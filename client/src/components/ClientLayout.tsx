@@ -1,11 +1,13 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import { ARBEN_LOGO_URL } from "@/components/BrandLogo";
 import ChargeRequestDialog from "@/components/ChargeRequestDialog";
+import { COMPANY } from "@/lib/company";
 import { trpc } from "@/lib/trpc";
 import {
   BarChart3,
   ChevronDown,
   ClipboardList,
+  Headset,
   Home,
   LogOut,
   type LucideIcon,
@@ -30,6 +32,8 @@ type NavItem = {
   href?: string;
   soon?: boolean;
   exact?: boolean;
+  /** 외부 링크(새 탭으로) — 카카오 채널 등. */
+  external?: boolean;
   children?: NavChild[];
 };
 
@@ -49,7 +53,8 @@ const NAV: NavSection[] = [
           { label: "캠페인 관리", href: "/client/campaigns" },
         ],
       },
-      { label: "메시지", sub: "리뷰어 · 운영팀 문의", icon: MessageCircle, href: "/client/messages" },
+      { label: "메시지", sub: "리뷰어 문의", icon: MessageCircle, href: "/client/messages" },
+      { label: "관리자에게 문의", sub: "카카오톡 채널 상담", icon: Headset, href: COMPANY.kakaoChannel, external: true },
       { label: "상위노출 컨설팅 의뢰", sub: "맞춤 전략 1:1 상담", icon: Rocket, href: "/client/consulting" },
       { label: "SEO 자가진단", sub: "예시 리포트", icon: Search, soon: true },
       { label: "순위조회", sub: "네이버 · 쿠팡", icon: TrendingUp, soon: true },
@@ -151,6 +156,13 @@ function NavRow({ item, location, badge }: { item: NavItem; location: string; ba
       </button>
     );
   }
+  if (item.external) {
+    return (
+      <a href={item.href} target="_blank" rel="noreferrer">
+        <NavRowShell item={item} active={false} />
+      </a>
+    );
+  }
   return (
     <Link href={item.href}>
       <NavRowShell item={item} active={active}>{badgeEl}</NavRowShell>
@@ -174,10 +186,9 @@ export default function ClientLayout({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [chargeOpen, setChargeOpen] = useState(false);
 
-  // 메시지 안읽음 배지 (리뷰어 + 운영팀)
+  // 메시지 안읽음 배지 (리뷰어 문의). 운영팀 문의는 카카오 채널로 이관.
   const { data: bizUnread = 0 } = trpc.businessMessage.unreadCount.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 5000 });
-  const { data: opsUnread = 0 } = trpc.directMessage.unreadCount.useQuery(undefined, { enabled: isAuthenticated, refetchInterval: 5000 });
-  const messageUnread = (bizUnread || 0) + (opsUnread || 0);
+  const messageUnread = bizUnread || 0;
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {

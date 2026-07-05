@@ -1,7 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import BusinessChatDialog from "@/components/BusinessChatDialog";
-import { ChatDialog } from "@/components/ChatDialog";
-import { useChatNotifications } from "@/hooks/useChatNotifications";
+import KakaoInquiryButton from "@/components/KakaoInquiryButton";
 import { ImageUploader } from "@/components/ImageUploader";
 import SiteHeader from "@/components/SiteHeader";
 import WorkflowStepper from "@/components/WorkflowStepper";
@@ -76,11 +75,7 @@ export default function MyActivity() {
     if (user?.role === "business") { window.location.href = "/client/dashboard"; return; }
   }, [authLoading, isAuthenticated, user?.role]);
 
-  const partIds = (parts ?? []).map(p => p.id);
-  const unreadChats = useChatNotifications(partIds);
-
   const [uploadFor, setUploadFor] = useState<{ id: number; kind: ProofKind; keyword?: string } | null>(null);
-  const [chatTarget, setChatTarget] = useState<{ participationId: number; title: string } | null>(null);
   const [bizChatWith, setBizChatWith] = useState<{ id: number; name: string } | null>(null);
 
   const downloadPacket = async (participationId: number) => {
@@ -354,18 +349,8 @@ export default function MyActivity() {
                       </p>
                     )}
 
-                    {/* 운영팀 문의 버튼 */}
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="relative bg-card"
-                      onClick={() => setChatTarget({ participationId: p.id, title: c?.title ?? "캠페인 문의" })}
-                    >
-                      <MessageCircle className="mr-1.5 h-4 w-4" /> 운영팀 문의
-                      {unreadChats.has(p.id) && (
-                        <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-red-500" />
-                      )}
-                    </Button>
+                    {/* 관리자 문의 = 카카오 채널 */}
+                    <KakaoInquiryButton size="sm" label="관리자에게 문의" />
 
                     {/* 업체 문의 버튼 */}
                     {c?.createdBy && (
@@ -442,15 +427,6 @@ export default function MyActivity() {
           </div>
         )}
       </main>
-
-      {chatTarget && (
-        <ChatDialog
-          open={!!chatTarget}
-          onOpenChange={o => !o && setChatTarget(null)}
-          participationId={chatTarget.participationId}
-          title={chatTarget.title}
-        />
-      )}
 
       <BusinessChatDialog
         open={!!bizChatWith}

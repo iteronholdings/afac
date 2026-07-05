@@ -14,7 +14,9 @@ import { Building2, ClipboardList, LayoutDashboard, ListChecks, LogOut, Menu, Me
 import { useState } from "react";
 import { Link } from "wouter";
 import BrandLogo from "@/components/BrandLogo";
+import KakaoInquiryButton from "@/components/KakaoInquiryButton";
 import ReviewerGuide from "@/components/ReviewerGuide";
+import { COMPANY } from "@/lib/company";
 
 type NavLink = { label: string; href: string };
 
@@ -35,10 +37,9 @@ export default function SiteHeader() {
   const initial = (user?.fullName || user?.name || "리").charAt(0);
   const navLinks = user?.role === "business" ? BUSINESS_NAV_LINKS : REVIEWER_NAV_LINKS;
 
-  // 메시지 안읽음(운영팀+업체) — 리뷰어 헤더 배지용
-  const { data: opsUnread = 0 } = trpc.directMessage.unreadCount.useQuery(undefined, { enabled: isAuthenticated && isReviewer, refetchInterval: 5000 });
+  // 메시지 안읽음(업체 문의) — 리뷰어 헤더 배지용. (운영팀 문의는 카카오 채널로 이관)
   const { data: bizUnread = 0 } = trpc.businessMessage.unreadCount.useQuery(undefined, { enabled: isAuthenticated && isReviewer, refetchInterval: 5000 });
-  const msgUnread = (opsUnread || 0) + (bizUnread || 0);
+  const msgUnread = bizUnread || 0;
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
@@ -74,6 +75,7 @@ export default function SiteHeader() {
                 <ListChecks className="h-4 w-4" /> 절차 안내
               </button>
             )}
+            {isReviewer && <KakaoInquiryButton size="sm" label="관리자 문의" />}
           </nav>
         )}
 
@@ -177,6 +179,13 @@ export default function SiteHeader() {
                 {isReviewer && (
                   <DropdownMenuItem onClick={() => setGuideOpen(true)}>
                     <ListChecks className="mr-2 h-4 w-4" /> 절차 안내
+                  </DropdownMenuItem>
+                )}
+                {isReviewer && (
+                  <DropdownMenuItem asChild>
+                    <a href={COMPANY.kakaoChannel} target="_blank" rel="noreferrer">
+                      <MessageCircle className="mr-2 h-4 w-4" /> 관리자에게 문의 (카카오)
+                    </a>
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
