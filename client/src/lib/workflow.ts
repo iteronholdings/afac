@@ -64,3 +64,10 @@ export function formatKRW(amount: number | null | undefined): string {
 export function totalPayout(productPrice: number, commission: number): number {
   return (productPrice || 0) + (commission || 0);
 }
+
+/** 캠페인 카테고리(플랫폼)를 리뷰어 안내용 쇼핑몰 이름으로. 판별 불가 시 "쇼핑몰". */
+export function mallName(category?: string | null): string {
+  if (category?.includes("쿠팡")) return "쿠팡";
+  if (category?.includes("스마트스토어") || category?.includes("네이버")) return "스마트스토어";
+  return "쇼핑몰";
+}

@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
-import { formatKRW, totalPayout } from "@/lib/workflow";
+import { formatKRW, mallName, totalPayout } from "@/lib/workflow";
 import { Input } from "@/components/ui/input";
 import RecruitScheduleInfo from "@/components/RecruitScheduleInfo";
 import { CheckCircle2, ImageIcon, Search, Sparkles } from "lucide-react";
@@ -181,7 +181,7 @@ export default function Campaigns() {
                   <img
                     src={selected.thumbnailUrl}
                     alt={selected.title}
-                    className="max-h-60 w-full object-cover"
+                    className="aspect-square w-full object-cover"
                   />
                 ) : (
                   <div className="flex h-40 items-center justify-center text-muted-foreground">
@@ -196,7 +196,7 @@ export default function Campaigns() {
                   <div>
                     <p className="font-medium text-foreground">검색 키워드</p>
                     <p className="text-muted-foreground">
-                      쇼핑몰에서 <b className="text-foreground">"{selected.keyword}"</b> (으)로 검색해 구매해 주세요.
+                      {mallName(selected.category)}에서 <b className="text-foreground">"{selected.keyword}"</b> (으)로 검색해 구매해 주세요.
                     </p>
                   </div>
                 </div>
