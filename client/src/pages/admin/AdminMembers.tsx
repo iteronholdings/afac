@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Table,
   TableBody,
@@ -23,7 +24,7 @@ import {
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
 import { memberMatchesQuery } from "@/lib/memberSearch";
-import { Check, Crown, MessageCircle, Pencil, RotateCcw, Search, Shield, ShieldCheck, ShieldOff, UserX, Users, X } from "lucide-react";
+import { Check, Copy, Crown, MapPin, MessageCircle, Pencil, RotateCcw, Search, Shield, ShieldCheck, ShieldOff, UserX, Users, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -48,6 +49,15 @@ export default function AdminMembers() {
   }, [allMembers, query, tab]);
 
   const iAmOwner = !!allMembers?.find(m => m.isSelf)?.isOwner;
+
+  const copyAddress = async (address: string) => {
+    try {
+      await navigator.clipboard.writeText(address);
+      toast.success("주소를 복사했어요.");
+    } catch {
+      toast.info(address);
+    }
+  };
 
   // 강제 탈퇴(블랙) / 복구
   const [withdrawTarget, setWithdrawTarget] = useState<{ id: number; name: string } | null>(null);
@@ -173,7 +183,25 @@ export default function AdminMembers() {
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
                     <p>{m.phone || "-"}</p>
-                    {m.address && <p className="max-w-52 truncate text-xs" title={m.address}>{m.address}</p>}
+                    {m.address && (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button type="button" className="mt-0.5 inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary">
+                            <MapPin className="h-3 w-3" /> 주소 보기
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" className="w-80 p-3">
+                          <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                            <MapPin className="h-3.5 w-3.5 text-primary" /> {m.fullName || m.name || "-"} 님의 주소 (택배 수령용)
+                          </p>
+                          <p className="mt-1.5 break-all text-sm font-medium text-foreground">{m.address}</p>
+                          <Button size="sm" variant="outline" className="mt-2 h-7 gap-1 rounded-full bg-card text-xs"
+                            onClick={() => copyAddress(m.address!)}>
+                            <Copy className="h-3 w-3" /> 복사
+                          </Button>
+                        </PopoverContent>
+                      </Popover>
+                    )}
                     {m.withdrawnAt && (
                       <p className="text-xs font-semibold text-destructive">
                         탈퇴 {new Date(m.withdrawnAt).toLocaleDateString("ko-KR")}
