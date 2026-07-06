@@ -43,6 +43,12 @@ export const users = mysqlTable("users", {
   /** 업체별 건당 리뷰 단가 (VIP 우대가 등). null이면 기본 단가(2,400원) 적용. */
   customReviewFee: int("customReviewFee"),
 
+  /** 세금계산서 발급 정보 — 발급으로 충전요청하면 저장돼 다음 충전 때 자동입력. */
+  taxBizNumber: varchar("taxBizNumber", { length: 20 }),
+  taxRepName: varchar("taxRepName", { length: 40 }),
+  taxCompanyName: varchar("taxCompanyName", { length: 100 }),
+  taxEmail: varchar("taxEmail", { length: 120 }),
+
   /** 리뷰어 절차 안내에 동의한 시각. null = 아직 미동의 (리뷰어 활동 차단). */
   reviewerAgreedAt: timestamp("reviewerAgreedAt"),
 

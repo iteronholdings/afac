@@ -82,6 +82,10 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE participations ADD COLUMN reviewDraft TEXT`,
     sql`ALTER TABLE participations ADD COLUMN assignedDate VARCHAR(20)`,
     sql`ALTER TABLE users ADD COLUMN customReviewFee INT NULL`,
+    sql`ALTER TABLE users ADD COLUMN taxBizNumber VARCHAR(20)`,
+    sql`ALTER TABLE users ADD COLUMN taxRepName VARCHAR(40)`,
+    sql`ALTER TABLE users ADD COLUMN taxCompanyName VARCHAR(100)`,
+    sql`ALTER TABLE users ADD COLUMN taxEmail VARCHAR(120)`,
   ];
   for (const stmt of alterStatements) {
     try {
@@ -431,6 +435,16 @@ export async function setCustomReviewFee(id: number, fee: number | null) {
   if (!db) throw new Error("Database not available");
   await db.update(users).set({ customReviewFee: fee }).where(eq(users.id, id));
   return getUserById(id);
+}
+
+/** 세금계산서 발급 정보를 회원 프로필에 저장 (다음 충전 때 자동입력용). */
+export async function setUserTaxInfo(
+  id: number,
+  info: { taxBizNumber: string; taxRepName: string; taxCompanyName: string; taxEmail: string }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set(info).where(eq(users.id, id));
 }
 
 /** Admin: reset a member's password (hash is computed in the router). */

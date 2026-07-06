@@ -94,6 +94,7 @@ export default function ChargeRequestDialog({
     onSuccess: () => {
       toast.success("충전요청이 접수되었어요! 입금 확인 후 예치금에 반영됩니다 🐻");
       utils.deposit.myRequests.invalidate();
+      utils.deposit.lastTaxInfo.invalidate();
       reset();
       onOpenChange(false);
     },
@@ -152,6 +153,7 @@ export default function ChargeRequestDialog({
       const synced = await syncVbank.mutateAsync({ paymentId: init.paymentId });
       const r = synced.request;
       utils.deposit.myRequests.invalidate();
+      utils.deposit.lastTaxInfo.invalidate();
       setIssued({
         bank: r?.vbankBank, number: r?.vbankNumber, holder: r?.vbankHolder, due: r?.vbankDue,
         amount: init.amount, credited: synced.credited,

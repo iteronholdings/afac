@@ -45,6 +45,17 @@ function taxFields(input: z.infer<typeof chargeInput>) {
   };
 }
 
+/** 발급으로 신청하면 세금계산서 정보를 회원 프로필에 저장 — 다음 충전 때 자동입력. */
+async function rememberTaxInfo(userId: number, input: z.infer<typeof chargeInput>) {
+  if (input.taxInvoice !== "issue") return;
+  await db.setUserTaxInfo(userId, {
+    taxBizNumber: input.bizNumber?.trim() ?? "",
+    taxRepName: input.repName?.trim() ?? "",
+    taxCompanyName: input.companyName?.trim() ?? "",
+    taxEmail: input.taxEmail?.trim() ?? "",
+  });
+}
+
 export const depositRouter = router({
   /** 현재 로그인한 업체의 예치금 잔액 + 거래 내역. */
   me: protectedProcedure.query(async ({ ctx }) => {
@@ -75,6 +86,7 @@ export const depositRouter = router({
         ...taxFields(input),
         status: "pending",
       });
+      await rememberTaxInfo(ctx.user.id, input);
       return created;
     }),
 
@@ -98,6 +110,7 @@ export const depositRouter = router({
         ...taxFields(input),
         status: "pending",
       });
+      await rememberTaxInfo(ctx.user.id, input);
       return {
         paymentId,
         storeId: portone.getStoreId(),
@@ -134,8 +147,19 @@ export const depositRouter = router({
     return db.listDepositRequestsByUser(ctx.user.id);
   }),
 
-  /** 마지막으로 입력한 세금계산서 발급 정보 (충전 창 자동입력용). 없으면 null. */
+  /** 저장된 세금계산서 발급 정보 (충전 창 자동입력용). 없으면 null. */
   lastTaxInfo: protectedProcedure.query(async ({ ctx }) => {
+    // 1순위: 회원 프로필에 저장된 정보 (발급 신청 시마다 갱신됨).
+    const user = await db.getUserById(ctx.user.id);
+    if (user?.taxBizNumber || user?.taxCompanyName) {
+      return {
+        bizNumber: user.taxBizNumber ?? "",
+        repName: user.taxRepName ?? "",
+        companyName: user.taxCompanyName ?? "",
+        taxEmail: user.taxEmail ?? "",
+      };
+    }
+    // 폴백: 프로필 저장 기능 도입 전에 신청했던 계정은 최근 충전요청 이력에서 복원.
     const rows = await db.listDepositRequestsByUser(ctx.user.id); // 최신순
     const last = rows.find(r => r.taxInvoice === "issue" && (r.bizNumber || r.companyName));
     if (!last) return null;
