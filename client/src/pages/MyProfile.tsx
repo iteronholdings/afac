@@ -59,7 +59,7 @@ export default function MyProfile() {
           </div>
 
           <div className="border-t border-border/60 pt-5">
-            <Label htmlFor="address" className="flex items-center gap-1.5"><MapPin className="h-4 w-4 text-primary" /> 주소</Label>
+            <Label htmlFor="address" className="flex items-center gap-1.5"><MapPin className="h-4 w-4 text-primary" /> 주소<span className="text-xs font-normal text-muted-foreground">(택배 수령용)</span></Label>
             <div className="mt-2 flex gap-2">
               <Input
                 id="address" placeholder="예: 부산 해운대구 반여로 96, 101동 101호" maxLength={255}
