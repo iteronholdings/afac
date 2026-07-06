@@ -1,5 +1,15 @@
 import AdminLayout from "@/components/AdminLayout";
 import { ProofThumb } from "@/components/ProofThumb";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -16,7 +26,7 @@ import {
   STATUS_LABEL,
   totalPayout,
 } from "@/lib/workflow";
-import { CheckCircle2, ChevronDown, ChevronRight, Inbox, MessageCircle, Phone, Wallet, XCircle } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, Inbox, MessageCircle, Phone, Trash2, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -59,6 +69,16 @@ export default function AdminParticipations() {
 
   const act = (participationId: number, status: ParticipationStatus) =>
     setStatusMutation.mutate({ participationId, status });
+
+  // 참여 삭제 — 반려와 달리 행을 지워 자리를 즉시 회수한다 (확인 다이얼로그 후 실행).
+  const [removeTarget, setRemoveTarget] = useState<{ id: number; name: string } | null>(null);
+  const removeMutation = trpc.participation.remove.useMutation({
+    onSuccess: () => {
+      utils.participation.listAll.invalidate();
+      toast.success("참여를 삭제했어요. 자리가 다시 열렸습니다.");
+    },
+    onError: err => toast.error(err.message),
+  });
 
   // 필터 적용
   const filtered = useMemo(() => {
@@ -234,14 +254,15 @@ export default function AdminParticipations() {
                             {status === "purchased" && (
                               <span className="rounded-xl bg-muted px-3 py-2 text-center text-xs text-muted-foreground">리뷰 인증 대기 중</span>
                             )}
-                            {status !== "paid" && status !== "rejected" && (
-                              <Button size="sm" variant="outline" className="bg-card text-destructive hover:text-destructive" disabled={setStatusMutation.isPending} onClick={() => act(r.id, "rejected")}>
-                                <XCircle className="mr-1.5 h-4 w-4" /> 반려
-                              </Button>
-                            )}
                             {status === "rejected" && (
                               <Button size="sm" variant="outline" className="bg-card" disabled={setStatusMutation.isPending} onClick={() => act(r.id, "applied")}>
                                 반려 취소
+                              </Button>
+                            )}
+                            {status !== "paid" && (
+                              <Button size="sm" variant="outline" className="bg-card text-destructive hover:text-destructive" disabled={removeMutation.isPending}
+                                onClick={() => setRemoveTarget({ id: r.id, name: r.user?.fullName ?? "리뷰어" })}>
+                                <Trash2 className="mr-1.5 h-4 w-4" /> 삭제
                               </Button>
                             )}
                             <Button
@@ -269,6 +290,33 @@ export default function AdminParticipations() {
           })}
         </div>
       )}
+
+      {/* 참여 삭제 확인 */}
+      <AlertDialog open={removeTarget !== null} onOpenChange={o => !o && setRemoveTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>참여를 삭제할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-medium text-foreground">{removeTarget?.name}</span> 님의 참여 내역이 완전히
+              삭제되고, 그 자리가 비워져 다른 리뷰어가 바로 참여할 수 있게 됩니다. 배정됐던 사진 묶음도
+              다음 참여자에게 다시 배정돼요. 이 작업은 되돌릴 수 없습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={removeMutation.isPending}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={removeMutation.isPending}
+              onClick={() => {
+                if (removeTarget) removeMutation.mutate({ participationId: removeTarget.id });
+                setRemoveTarget(null);
+              }}
+            >
+              삭제하기
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 }

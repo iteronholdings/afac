@@ -667,6 +667,13 @@ export async function updateParticipation(
   return getParticipationById(id);
 }
 
+/** 참여 삭제 (관리자). 행이 사라지므로 정원·사진 유닛·전화번호 중복차단이 즉시 회수된다. */
+export async function deleteParticipation(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(participations).where(eq(participations.id, id));
+}
+
 /** Participations for one reviewer (with campaign info joined in code). */
 export async function listParticipationsByUser(userId: number) {
   const db = await getDb();

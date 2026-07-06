@@ -154,6 +154,13 @@ async function analyzeZipUnits(zip: JSZip, depth = 0): Promise<PacketUnit[]> {
   });
 
   units.sort((a, b) => a.name.localeCompare(b.name, "ko"));
+  // 배치 폴더가 달라도 폴더명이 같으면 유닛 이름이 충돌(같은 R2 키·중복 배정)하므로 " (2)" 접미로 유일화.
+  const seen = new Map<string, number>();
+  for (const u of units) {
+    const n = (seen.get(u.name) ?? 0) + 1;
+    seen.set(u.name, n);
+    if (n > 1) u.name = `${u.name.replace(/\.zip$/i, "")} (${n}).zip`;
+  }
   return units;
 }
 
@@ -187,22 +194,28 @@ export async function assignPacketsForCampaign(
     .sort((a, b) => new Date(a.appliedAt).getTime() - new Date(b.appliedAt).getTime());
 
   const useR2 = isStorageConfigured();
+  // 유닛은 **이름 기준**으로 이미 배정된 것을 제외한다 — 참여가 삭제되면 그 사람이 갖고 있던
+  // 유닛이 자동으로 '빈 유닛'이 되어 다음 참여자에게 회수·재배정된다. (순번 방식은 삭제 시
+  // 같은 유닛이 두 명에게 가거나 유닛이 붕 뜨는 문제가 있어 교체)
+  const usedNames = new Set(parts.map(p => p.assignedName).filter(Boolean));
+  const freeUnits = units.filter(u => !usedNames.has(u.name));
+  const waiting = parts.filter(p => !p.assignedPacket);
   let assigned = 0;
-  for (let i = 0; i < parts.length && i < units.length; i++) {
-    if (parts[i].assignedPacket) continue; // 이미 배정됨 → 재호출 안전
-    const unit = units[i];
+  for (let i = 0; i < waiting.length && i < freeUnits.length; i++) {
+    const part = waiting[i];
+    const unit = freeUnits[i];
     const bytes = await unit.bytes();
     const assignedName = unit.name;
     // 패킷 배정 시 리뷰 원고가 없으면 함께 생성(사진형). join 누락분 backfill.
-    const draftPatch = parts[i].reviewDraft
+    const draftPatch = part.reviewDraft
       ? {}
       : { reviewDraft: generateReviewDraft({ type: "photo", title: campaign.title, keyword: campaign.keyword }) };
     if (useR2) {
       const { key } = await storagePut(`review-packets/${campaign.id}/${assignedName}`, bytes, "application/zip");
-      await db.updateParticipation(parts[i].id, { assignedPacket: `r2:${key}`, assignedName, ...draftPatch });
+      await db.updateParticipation(part.id, { assignedPacket: `r2:${key}`, assignedName, ...draftPatch });
     } else {
       const packetB64 = Buffer.from(bytes).toString("base64");
-      await db.updateParticipation(parts[i].id, {
+      await db.updateParticipation(part.id, {
         assignedPacket: `data:application/zip;base64,${packetB64}`,
         assignedName,
         ...draftPatch,

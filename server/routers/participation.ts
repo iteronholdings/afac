@@ -278,4 +278,17 @@ export const participationRouter = router({
 
       return db.updateParticipation(input.participationId, patch);
     }),
+
+  // Admin: 참여 삭제 — 반려와 달리 행을 지워 정원·사진 유닛을 즉시 회수한다.
+  remove: adminProcedure
+    .input(z.object({ participationId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const p = await db.getParticipationById(input.participationId);
+      if (!p) throw new TRPCError({ code: "NOT_FOUND", message: "참여 내역을 찾을 수 없습니다." });
+      if (p.status === "paid") {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "입금 완료된 참여는 정산 이력 보존을 위해 삭제할 수 없습니다." });
+      }
+      await db.deleteParticipation(input.participationId);
+      return { success: true as const };
+    }),
 });
