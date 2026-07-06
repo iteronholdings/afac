@@ -268,6 +268,17 @@ export default function CampaignWizard() {
   const [zipInfo, setZipInfo] = useState<ZipAnalysis | null>(null);
   /** 사진(ZIP 명분)이 모집 인원보다 적을 때 확인 다이얼로그. null=닫힘. */
   const [zipShortage, setZipShortage] = useState<{ units: number; need: number } | null>(null);
+
+  // 네이버 선택 시 어뷰징 방지 안내 팝업 (마법사 열 때마다 최초 1회)
+  const [naverNotice, setNaverNotice] = useState(false);
+  const naverNoticeShown = useRef(false);
+  const pickPlatform = (p: Platform) => {
+    setData(prev => ({ ...prev, platform: p }));
+    if (p === "naver" && !naverNoticeShown.current) {
+      naverNoticeShown.current = true;
+      setNaverNotice(true);
+    }
+  };
   const presignZip = trpc.campaign.zipUploadUrl.useMutation();
   const onZipFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -532,7 +543,7 @@ export default function CampaignWizard() {
                     <Label className="mb-2 block font-semibold">플랫폼 *</Label>
                     <div className="grid grid-cols-2 gap-3">
                       {(["coupang", "naver"] as const).map(p => (
-                        <button key={p} type="button" onClick={() => setData(prev => ({ ...prev, platform: p }))}
+                        <button key={p} type="button" onClick={() => pickPlatform(p)}
                           className={`rounded-2xl border-2 py-3 text-sm font-bold transition-all ${
                             data.platform === p
                               ? p === "coupang" ? "border-orange-500 bg-orange-500 text-white" : "border-green-500 bg-green-500 text-white"
@@ -921,6 +932,33 @@ export default function CampaignWizard() {
       </div>
 
       {/* 사진(ZIP 명분) < 모집 인원 — 고객이 확인해야 다음 단계로 진행 */}
+      {/* 네이버 진행 시 어뷰징 방지 안내 */}
+      <AlertDialog open={naverNotice} onOpenChange={setNaverNotice}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>🍀 네이버 리뷰 진행 안내</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm leading-relaxed">
+                <p>
+                  네이버 스마트스토어는 어뷰징 감지가 민감해서, 리뷰가 한 번에 몰리면 스토어에
+                  불이익이 갈 수 있어요.
+                </p>
+                <p>
+                  <b className="text-foreground">하루 최대 10건 정도</b>로 나눠 신청하시는 것이
+                  가장 안전합니다. 모집 인원이 많다면 <b className="text-foreground">날짜별 인원
+                  배분</b>으로 하루 10명 이하씩 나눠 주세요.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => setNaverNotice(false)} className="font-bold">
+              확인했어요
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={!!zipShortage} onOpenChange={o => !o && setZipShortage(null)}>
         <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
