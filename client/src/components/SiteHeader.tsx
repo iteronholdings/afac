@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
-import { Building2, ClipboardList, LayoutDashboard, ListChecks, LogOut, Menu, MessageCircle, UserRound } from "lucide-react";
+import { Building2, ClipboardList, LayoutDashboard, ListChecks, LogOut, Menu, MessageCircle, Settings, UserRound } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
 import BrandLogo from "@/components/BrandLogo";
@@ -119,6 +119,12 @@ export default function SiteHeader() {
                       <Link href="/my">
                         <UserRound className="mr-2 h-4 w-4" />
                         내 활동
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/profile">
+                        <Settings className="mr-2 h-4 w-4" />
+                        내 정보
                       </Link>
                     </DropdownMenuItem>
                   </>

@@ -1,6 +1,16 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import AdminLayout from "@/components/AdminLayout";
 import PasswordResetButton from "@/components/PasswordResetButton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,18 +22,49 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
-import { Check, Crown, MessageCircle, Pencil, Shield, ShieldCheck, ShieldOff, Users, X } from "lucide-react";
-import { useState } from "react";
+import { memberMatchesQuery } from "@/lib/memberSearch";
+import { Check, Crown, MessageCircle, Pencil, RotateCcw, Search, Shield, ShieldCheck, ShieldOff, UserX, Users, X } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 export default function AdminMembers() {
   const utils = trpc.useUtils();
   const { user } = useAuth();
   const { data: allMembers, isLoading } = trpc.admin.listMembers.useQuery();
+
+  // 검색(이름/아이디/전화번호/코드) + 활동/탈퇴 탭
+  const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<"active" | "withdrawn">("active");
+
   // 리뷰어 관리 — 업체(비즈니스) 계정은 '업체 관리'에서 따로 관리.
-  const members = allMembers?.filter(m => m.role !== "business");
+  const { members, withdrawnCount, activeCount } = useMemo(() => {
+    const reviewers = (allMembers ?? []).filter(m => m.role !== "business");
+    const matched = reviewers.filter(m => memberMatchesQuery(m, query));
+    return {
+      members: matched.filter(m => (tab === "withdrawn" ? !!m.withdrawnAt : !m.withdrawnAt)),
+      activeCount: matched.filter(m => !m.withdrawnAt).length,
+      withdrawnCount: matched.filter(m => !!m.withdrawnAt).length,
+    };
+  }, [allMembers, query, tab]);
 
   const iAmOwner = !!allMembers?.find(m => m.isSelf)?.isOwner;
+
+  // 강제 탈퇴(블랙) / 복구
+  const [withdrawTarget, setWithdrawTarget] = useState<{ id: number; name: string } | null>(null);
+  const withdrawMutation = trpc.admin.withdrawMember.useMutation({
+    onSuccess: () => {
+      utils.admin.listMembers.invalidate();
+      toast.success("탈퇴 처리했습니다. 해당 계정은 로그인과 동일 번호 재가입이 차단됩니다.");
+    },
+    onError: err => toast.error(err.message),
+  });
+  const restoreMutation = trpc.admin.restoreMember.useMutation({
+    onSuccess: () => {
+      utils.admin.listMembers.invalidate();
+      toast.success("계정을 복구했습니다. 다시 로그인할 수 있습니다.");
+    },
+    onError: err => toast.error(err.message),
+  });
 
   // memberCode inline edit state: memberId → draft string
   const [editingCode, setEditingCode] = useState<Record<number, string>>({});
@@ -49,7 +90,29 @@ export default function AdminMembers() {
     <AdminLayout
       title="리뷰어 관리"
       description="리뷰어 회원을 확인하고 관리자 권한을 부여하거나 회수합니다. (업체는 '업체 관리'에서)"
+      actions={
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="이름·아이디·전화번호 검색"
+            className="h-9 w-56 bg-card pl-9"
+          />
+        </div>
+      }
     >
+      {/* 활동 / 탈퇴 탭 */}
+      <div className="mb-4 flex gap-2">
+        {([["active", `활동 회원 ${activeCount}`], ["withdrawn", `탈퇴 회원 ${withdrawnCount}`]] as const).map(([v, label]) => (
+          <button key={v} type="button" onClick={() => setTab(v)}
+            className={`rounded-full border-2 px-4 py-1.5 text-sm font-bold transition-all ${
+              tab === v ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:border-primary/40"
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       {!iAmOwner && (
         <div className="mb-4 flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <Shield className="mt-0.5 h-4 w-4 shrink-0" />
@@ -71,7 +134,7 @@ export default function AdminMembers() {
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
               <Users className="h-6 w-6 text-muted-foreground" />
             </div>
-            <p className="font-semibold">가입한 회원이 없습니다</p>
+            <p className="font-semibold">{query ? "검색 결과가 없습니다" : tab === "withdrawn" ? "탈퇴 처리된 회원이 없습니다" : "가입한 회원이 없습니다"}</p>
           </div>
         ) : (
           <Table>
@@ -109,7 +172,13 @@ export default function AdminMembers() {
                     {m.loginId || <span className="italic">{m.loginMethod}</span>}
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                    {m.phone || "-"}
+                    <p>{m.phone || "-"}</p>
+                    {m.address && <p className="max-w-52 truncate text-xs" title={m.address}>{m.address}</p>}
+                    {m.withdrawnAt && (
+                      <p className="text-xs font-semibold text-destructive">
+                        탈퇴 {new Date(m.withdrawnAt).toLocaleDateString("ko-KR")}
+                      </p>
+                    )}
                   </TableCell>
                   <TableCell>
                     {m.isOwner ? (
@@ -189,6 +258,19 @@ export default function AdminMembers() {
                       {!m.isOwner && (
                         <PasswordResetButton userId={m.id} name={m.fullName || m.name || m.loginId || "-"} />
                       )}
+                      {m.withdrawnAt ? (
+                        <Button size="sm" variant="outline" className="bg-card" disabled={restoreMutation.isPending}
+                          onClick={() => restoreMutation.mutate({ userId: m.id })}>
+                          <RotateCcw className="mr-1.5 h-3.5 w-3.5" /> 복구
+                        </Button>
+                      ) : (
+                        !m.isSelf && !m.isOwner && m.role !== "admin" && (
+                          <Button size="sm" variant="outline" className="bg-card text-destructive hover:text-destructive" disabled={withdrawMutation.isPending}
+                            onClick={() => setWithdrawTarget({ id: m.id, name: m.fullName || m.name || m.loginId || "-" })}>
+                            <UserX className="mr-1.5 h-3.5 w-3.5" /> 탈퇴
+                          </Button>
+                        )
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
@@ -220,6 +302,32 @@ export default function AdminMembers() {
           </Table>
         )}
       </div>
+
+      {/* 강제 탈퇴(블랙) 확인 */}
+      <AlertDialog open={withdrawTarget !== null} onOpenChange={o => !o && setWithdrawTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>회원을 탈퇴(블랙) 처리할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-medium text-foreground">{withdrawTarget?.name}</span> 님은 즉시 로그아웃되며,
+              로그인과 동일 전화번호로의 재가입이 차단됩니다. 탈퇴 회원 탭에서 언제든 복구할 수 있어요.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={withdrawMutation.isPending}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={withdrawMutation.isPending}
+              onClick={() => {
+                if (withdrawTarget) withdrawMutation.mutate({ userId: withdrawTarget.id });
+                setWithdrawTarget(null);
+              }}
+            >
+              탈퇴 처리
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 }

@@ -26,6 +26,8 @@ export const users = mysqlTable("users", {
   fullName: varchar("fullName", { length: 100 }),
   /** Member phone number (전화번호). */
   phone: varchar("phone", { length: 32 }),
+  /** 주소 (가입 시 기입, 내 정보에서 수정). */
+  address: varchar("address", { length: 255 }),
 
   /** Bank name for payout (은행명). e.g. 국민은행 */
   bankName: varchar("bankName", { length: 50 }),
@@ -51,6 +53,9 @@ export const users = mysqlTable("users", {
 
   /** 리뷰어 절차 안내에 동의한 시각. null = 아직 미동의 (리뷰어 활동 차단). */
   reviewerAgreedAt: timestamp("reviewerAgreedAt"),
+
+  /** 관리자 강제 탈퇴(블랙) 처리 시각. null이 아니면 로그인·재가입(동일 전화번호) 차단. */
+  withdrawnAt: timestamp("withdrawnAt"),
 
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

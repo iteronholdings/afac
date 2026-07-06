@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
-import { CreditCard, IdCard, Loader2, Lock, User } from "lucide-react";
+import { CreditCard, IdCard, Loader2, Lock, MapPin, User } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
@@ -17,6 +17,7 @@ type FormState = {
   passwordConfirm: string;
   fullName: string;
   phone: string;
+  address: string;
   bankName: string;
   bankAccount: string;
   bankHolder: string;
@@ -26,7 +27,7 @@ export default function Signup() {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
   const [form, setForm] = useState<FormState>({
-    loginId: "", password: "", passwordConfirm: "", fullName: "", phone: "",
+    loginId: "", password: "", passwordConfirm: "", fullName: "", phone: "", address: "",
     bankName: "", bankAccount: "", bankHolder: "",
   });
   const [privacyAgreed, setPrivacyAgreed] = useState(false);
@@ -51,7 +52,7 @@ export default function Signup() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.loginId || !form.password || !form.fullName || !form.phone) {
+    if (!form.loginId || !form.password || !form.fullName || !form.phone || !form.address.trim()) {
       toast.error("모든 항목을 입력해 주세요.");
       return;
     }
@@ -80,6 +81,7 @@ export default function Signup() {
       password: form.password,
       fullName: form.fullName.trim(),
       phone: form.phone.trim(),
+      address: form.address.trim(),
       role: "user",
       bankName: form.bankName.trim(),
       bankAccount: form.bankAccount.trim(),
@@ -139,6 +141,14 @@ export default function Signup() {
           verified={phoneVerified}
           onVerifiedChange={setPhoneVerified}
         />
+
+        <div className="space-y-2">
+          <Label htmlFor="address">주소</Label>
+          <div className="relative">
+            <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input id="address" autoComplete="street-address" placeholder="예: 부산 해운대구 반여로 96, 101동 101호" value={form.address} onChange={update("address")} className="h-11 pl-9" />
+          </div>
+        </div>
 
         <div className="space-y-3 rounded-2xl border border-border/70 bg-secondary/30 p-4">
           <p className="flex items-center gap-1.5 text-sm font-semibold text-foreground">

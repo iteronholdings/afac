@@ -140,6 +140,7 @@ export const authRouter = router({
         password: passwordSchema,
         fullName: fullNameSchema,
         phone: phoneSchema,
+        address: z.string().trim().max(255, "주소가 너무 깁니다.").optional(),
         role: z.enum(["user", "business"]).default("user"),
         bankName: z.string().max(50).optional(),
         bankAccount: z.string().max(50).optional(),
@@ -155,6 +156,11 @@ export const authRouter = router({
         if (!fresh) {
           throw new TRPCError({ code: "FORBIDDEN", message: "전화번호 인증을 완료해 주세요." });
         }
+      }
+
+      // 탈퇴(블랙) 처리된 전화번호는 재가입 차단.
+      if (await db.hasWithdrawnUserWithPhone(input.phone)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "가입이 제한된 전화번호입니다. 고객센터로 문의해 주세요." });
       }
 
       const existing = await db.getUserByLoginId(input.loginId);
@@ -174,6 +180,7 @@ export const authRouter = router({
         passwordHash,
         fullName: input.fullName,
         phone: input.phone,
+        address: input.address,
         role: input.role,
         bankName: input.bankName,
         bankAccount: input.bankAccount,
@@ -221,6 +228,10 @@ export const authRouter = router({
         throw invalid;
       }
 
+      if (user.withdrawnAt) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "탈퇴 처리된 계정입니다. 고객센터로 문의해 주세요." });
+      }
+
       await db.touchLastSignedIn(user.openId);
       await issueSession(ctx, user.openId, user.fullName || user.name || user.openId);
 
@@ -233,6 +244,14 @@ export const authRouter = router({
     .query(async ({ input }) => {
       const existing = await db.getUserByLoginId(input.loginId);
       return { available: !existing };
+    }),
+
+  /** 내 정보: 주소 수정. */
+  updateAddress: protectedProcedure
+    .input(z.object({ address: z.string().trim().min(1, "주소를 입력해 주세요.").max(255, "주소가 너무 깁니다.") }))
+    .mutation(async ({ ctx, input }) => {
+      await db.setUserAddress(ctx.user.id, input.address);
+      return { success: true as const };
     }),
 
   // 리뷰어: 절차 안내를 읽고 동의. 동의해야 캠페인 참여 등 리뷰어 활동 가능.

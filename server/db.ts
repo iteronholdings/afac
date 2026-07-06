@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   businessMessages,
@@ -86,6 +86,8 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE users ADD COLUMN taxRepName VARCHAR(40)`,
     sql`ALTER TABLE users ADD COLUMN taxCompanyName VARCHAR(100)`,
     sql`ALTER TABLE users ADD COLUMN taxEmail VARCHAR(120)`,
+    sql`ALTER TABLE users ADD COLUMN address VARCHAR(255)`,
+    sql`ALTER TABLE users ADD COLUMN withdrawnAt TIMESTAMP NULL`,
   ];
   for (const stmt of alterStatements) {
     try {
@@ -351,6 +353,7 @@ export async function createMember(member: {
   passwordHash: string;
   fullName: string;
   phone: string;
+  address?: string;
   role?: "user" | "business" | "admin";
   bankName?: string;
   bankAccount?: string;
@@ -371,6 +374,7 @@ export async function createMember(member: {
     fullName: member.fullName,
     name: member.fullName,
     phone: member.phone,
+    address: member.address,
     loginMethod: "local",
     role,
     lastSignedIn: new Date(),
@@ -435,6 +439,38 @@ export async function setCustomReviewFee(id: number, fee: number | null) {
   if (!db) throw new Error("Database not available");
   await db.update(users).set({ customReviewFee: fee }).where(eq(users.id, id));
   return getUserById(id);
+}
+
+/** 주소 수정 (내 정보). */
+export async function setUserAddress(id: number, address: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ address }).where(eq(users.id, id));
+  return getUserById(id);
+}
+
+/** 관리자 강제 탈퇴(블랙) 처리/복구. */
+export async function setWithdrawn(id: number, withdrawn: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ withdrawnAt: withdrawn ? new Date() : null }).where(eq(users.id, id));
+  return getUserById(id);
+}
+
+/** 같은 전화번호(숫자만 비교)로 탈퇴(블랙) 처리된 계정이 있는지 — 재가입 차단용. */
+export async function hasWithdrawnUserWithPhone(phone: string): Promise<boolean> {
+  const db = await getDb();
+  const digits = phone.replace(/\D/g, "");
+  if (!db || !digits) return false;
+  const rows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(
+      isNotNull(users.withdrawnAt),
+      sql`REPLACE(REPLACE(REPLACE(${users.phone}, '-', ''), ' ', ''), '+82', '0') = ${digits}`,
+    ))
+    .limit(1);
+  return rows.length > 0;
 }
 
 /** 세금계산서 발급 정보를 회원 프로필에 저장 (다음 충전 때 자동입력용). */

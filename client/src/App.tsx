@@ -28,6 +28,7 @@ import Landing from "./pages/Landing";
 import Privacy from "./pages/Privacy";
 import Refund from "./pages/Refund";
 import MyActivity from "./pages/MyActivity";
+import MyProfile from "./pages/MyProfile";
 import ReviewerMessages from "./pages/ReviewerMessages";
 import ReviewerOnboarding from "./pages/ReviewerOnboarding";
 import Login from "./pages/Login";
@@ -121,6 +122,7 @@ function Router() {
       <Route path="/home" component={() => <ReviewerRoute component={Home} />} />
       <Route path="/campaigns" component={() => <ReviewerRoute component={Campaigns} />} />
       <Route path="/my" component={() => <ReviewerRoute component={MyActivity} />} />
+      <Route path="/profile" component={() => <ProtectedRoute component={MyProfile} />} />
       <Route path="/messages" component={() => <ReviewerRoute component={ReviewerMessages} />} />
       <Route path="/business" component={() => <ProtectedRoute component={BusinessDashboard} loginPath="/client/login" role="business" />} />
       <Route path="/client" component={() => <Redirect to="/client/login" />} />

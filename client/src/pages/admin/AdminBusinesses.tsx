@@ -1,6 +1,16 @@
 import AdminLayout from "@/components/AdminLayout";
 import DepositHistory from "@/components/DepositHistory";
 import PasswordResetButton from "@/components/PasswordResetButton";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,9 +21,10 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { memberMatchesQuery } from "@/lib/memberSearch";
 import { trpc } from "@/lib/trpc";
-import { BadgePercent, Building2, Loader2, Minus, Plus, Receipt, Wallet } from "lucide-react";
-import { useState } from "react";
+import { BadgePercent, Building2, Loader2, Minus, Plus, Receipt, RotateCcw, Search, UserX, Wallet } from "lucide-react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 type Target = { id: number; name: string; balance: number; action: "charge" | "deduct" } | null;
@@ -24,6 +35,36 @@ const DEFAULT_REVIEW_FEE = 2400;
 export default function AdminBusinesses() {
   const utils = trpc.useUtils();
   const { data = [], isLoading } = trpc.admin.listBusinesses.useQuery();
+
+  // 검색(업체명/아이디/전화번호/코드) + 활동/탈퇴 탭
+  const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<"active" | "withdrawn">("active");
+  const { shown, activeCount, withdrawnCount } = useMemo(() => {
+    const matched = data.filter(b => memberMatchesQuery(b, query));
+    return {
+      shown: matched.filter(b => (tab === "withdrawn" ? !!b.withdrawnAt : !b.withdrawnAt)),
+      activeCount: matched.filter(b => !b.withdrawnAt).length,
+      withdrawnCount: matched.filter(b => !!b.withdrawnAt).length,
+    };
+  }, [data, query, tab]);
+
+  // 강제 탈퇴(블랙) / 복구
+  const [withdrawTarget, setWithdrawTarget] = useState<{ id: number; name: string } | null>(null);
+  const withdrawMutation = trpc.admin.withdrawMember.useMutation({
+    onSuccess: () => {
+      utils.admin.listBusinesses.invalidate();
+      toast.success("탈퇴 처리했습니다. 해당 계정은 로그인과 동일 번호 재가입이 차단됩니다.");
+    },
+    onError: err => toast.error(err.message),
+  });
+  const restoreMutation = trpc.admin.restoreMember.useMutation({
+    onSuccess: () => {
+      utils.admin.listBusinesses.invalidate();
+      toast.success("계정을 복구했습니다. 다시 로그인할 수 있습니다.");
+    },
+    onError: err => toast.error(err.message),
+  });
+
   const [target, setTarget] = useState<Target>(null);
   const [amount, setAmount] = useState("");
   const [memo, setMemo] = useState("");
@@ -83,7 +124,32 @@ export default function AdminBusinesses() {
   };
 
   return (
-    <AdminLayout title="업체 관리" description="업체 계정과 예치금을 관리합니다.">
+    <AdminLayout
+      title="업체 관리"
+      description="업체 계정과 예치금을 관리합니다."
+      actions={
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query} onChange={e => setQuery(e.target.value)}
+            placeholder="업체명·아이디·전화번호 검색"
+            className="h-9 w-56 bg-card pl-9"
+          />
+        </div>
+      }
+    >
+      {/* 활동 / 탈퇴 탭 */}
+      <div className="mb-4 flex gap-2">
+        {([["active", `활동 업체 ${activeCount}`], ["withdrawn", `탈퇴 업체 ${withdrawnCount}`]] as const).map(([v, label]) => (
+          <button key={v} type="button" onClick={() => setTab(v)}
+            className={`rounded-full border-2 px-4 py-1.5 text-sm font-bold transition-all ${
+              tab === v ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:border-primary/40"
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* 예치금 충전요청 */}
       {pendingReqs.length > 0 && (
         <div className="mb-6 rounded-2xl border border-amber-300/60 bg-amber-50 p-4 shadow-sm">
@@ -148,24 +214,27 @@ export default function AdminBusinesses() {
         <div className="space-y-3">
           {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-16 animate-pulse rounded-2xl bg-muted" />)}
         </div>
-      ) : data.length === 0 ? (
+      ) : shown.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-border bg-card py-20 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted"><Building2 className="h-6 w-6 text-muted-foreground" /></div>
-          <p className="font-semibold">등록된 업체가 없습니다</p>
+          <p className="font-semibold">{query ? "검색 결과가 없습니다" : tab === "withdrawn" ? "탈퇴 처리된 업체가 없습니다" : "등록된 업체가 없습니다"}</p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
           <div className="overflow-x-auto">
-          <div className="min-w-[960px]">
-          <div className="grid grid-cols-[1.4fr_0.7fr_1fr_0.9fr_1fr_330px] items-center gap-3 border-b border-border/60 bg-muted/40 px-4 py-3 text-xs font-semibold text-muted-foreground">
+          <div className="min-w-[1040px]">
+          <div className="grid grid-cols-[1.4fr_0.7fr_1fr_0.9fr_1fr_410px] items-center gap-3 border-b border-border/60 bg-muted/40 px-4 py-3 text-xs font-semibold text-muted-foreground">
             <div>업체명</div><div>코드</div><div>연락처</div><div className="text-right">리뷰 단가</div><div className="text-right">예치금 잔액</div><div className="text-right">예치금 조정</div>
           </div>
           <div className="divide-y divide-border/50">
-            {data.map(b => (
-              <div key={b.id} className="grid grid-cols-[1.4fr_0.7fr_1fr_0.9fr_1fr_330px] items-center gap-3 px-4 py-3.5 text-sm">
+            {shown.map(b => (
+              <div key={b.id} className="grid grid-cols-[1.4fr_0.7fr_1fr_0.9fr_1fr_410px] items-center gap-3 px-4 py-3.5 text-sm">
                 <div>
                   <p className="font-semibold text-foreground">{b.fullName}</p>
                   <p className="text-xs text-muted-foreground">{b.loginId}</p>
+                  {b.withdrawnAt && (
+                    <p className="text-xs font-semibold text-destructive">탈퇴 {new Date(b.withdrawnAt).toLocaleDateString("ko-KR")}</p>
+                  )}
                 </div>
                 <div>
                   <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-mono text-muted-foreground">{b.memberCode ?? "-"}</span>
@@ -199,6 +268,17 @@ export default function AdminBusinesses() {
                     <Receipt className="h-3.5 w-3.5" /> 내역
                   </Button>
                   <PasswordResetButton userId={b.id} name={b.fullName} />
+                  {b.withdrawnAt ? (
+                    <Button size="sm" variant="outline" className="h-8 gap-1 rounded-full bg-card" disabled={restoreMutation.isPending}
+                      onClick={() => restoreMutation.mutate({ userId: b.id })}>
+                      <RotateCcw className="h-3.5 w-3.5" /> 복구
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" className="h-8 gap-1 rounded-full bg-card text-destructive hover:text-destructive" disabled={withdrawMutation.isPending}
+                      onClick={() => setWithdrawTarget({ id: b.id, name: b.fullName })}>
+                      <UserX className="h-3.5 w-3.5" /> 탈퇴
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -307,6 +387,33 @@ export default function AdminBusinesses() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* 강제 탈퇴(블랙) 확인 */}
+      <AlertDialog open={withdrawTarget !== null} onOpenChange={o => !o && setWithdrawTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>업체를 탈퇴(블랙) 처리할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-medium text-foreground">{withdrawTarget?.name}</span> 업체는 즉시 로그아웃되며,
+              로그인과 동일 전화번호로의 재가입이 차단됩니다. 예치금·캠페인 기록은 그대로 보존되고,
+              탈퇴 업체 탭에서 언제든 복구할 수 있어요.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={withdrawMutation.isPending}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={withdrawMutation.isPending}
+              onClick={() => {
+                if (withdrawTarget) withdrawMutation.mutate({ userId: withdrawTarget.id });
+                setWithdrawTarget(null);
+              }}
+            >
+              탈퇴 처리
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 }

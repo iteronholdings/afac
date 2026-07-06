@@ -28,15 +28,44 @@ export const adminRouter = router({
       fullName: u.fullName,
       name: u.name,
       phone: u.phone,
+      address: u.address ?? null,
       role: u.role,
       loginMethod: u.loginMethod,
       createdAt: u.createdAt,
       lastSignedIn: u.lastSignedIn,
       memberCode: u.memberCode ?? null,
+      withdrawnAt: u.withdrawnAt ?? null,
       isOwner: isOwner(u.loginId),
       isSelf: u.id === ctx.user.id,
     }));
   }),
+
+  /** 관리자 강제 탈퇴(블랙) 처리. 로그인·재가입(동일 전화번호)이 차단된다. */
+  withdrawMember: adminProcedure
+    .input(z.object({ userId: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.userId === ctx.user.id) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "본인 계정은 탈퇴 처리할 수 없습니다." });
+      }
+      const target = await db.getUserById(input.userId);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "회원을 찾을 수 없습니다." });
+      if (isOwner(target.loginId)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "최상위 관리자는 탈퇴 처리할 수 없습니다." });
+      }
+      if (target.role === "admin") {
+        throw new TRPCError({ code: "FORBIDDEN", message: "관리자 계정은 권한 회수 후에 탈퇴 처리할 수 있습니다." });
+      }
+      return db.setWithdrawn(input.userId, true);
+    }),
+
+  /** 탈퇴(블랙) 복구 — 다시 로그인할 수 있게 된다. */
+  restoreMember: adminProcedure
+    .input(z.object({ userId: z.number().int() }))
+    .mutation(async ({ input }) => {
+      const target = await db.getUserById(input.userId);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "회원을 찾을 수 없습니다." });
+      return db.setWithdrawn(input.userId, false);
+    }),
 
   // Grant or revoke admin role. Only the owner can do this, and the owner's
   // own role can never be changed.
@@ -101,6 +130,7 @@ export const adminRouter = router({
         depositBalance: u.depositBalance ?? 0,
         customReviewFee: u.customReviewFee ?? null,
         createdAt: u.createdAt,
+        withdrawnAt: u.withdrawnAt ?? null,
       }));
   }),
 
