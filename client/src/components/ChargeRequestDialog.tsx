@@ -18,9 +18,9 @@ import { toast } from "sonner";
  * 실제 운영 계좌로 교체해서 사용하세요.
  */
 export const DEPOSIT_ACCOUNT = {
-  bank: "국민은행",
-  number: "000000-00-000000",
-  holder: "아르벤팩토리",
+  bank: "NH농협은행",
+  number: "302-2159-0552-51",
+  holder: "김채현(아르벤팩토리)",
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
