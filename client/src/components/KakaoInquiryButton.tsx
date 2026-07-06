@@ -20,7 +20,7 @@ export default function KakaoInquiryButton({
       href={COMPANY.kakaoChannel}
       target="_blank"
       rel="noreferrer"
-      className={`inline-flex items-center gap-1.5 rounded-full bg-[#FAE100] font-bold text-[#3B1E1E] transition-opacity hover:opacity-85 ${sizeCls} ${className}`}
+      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-[#FAE100] font-bold text-[#3B1E1E] transition-opacity hover:opacity-85 ${sizeCls} ${className}`}
     >
       <MessageCircle className="h-4 w-4 fill-[#3B1E1E]" />
       {label}

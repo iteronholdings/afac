@@ -69,7 +69,8 @@ function Header() {
           <BrandLogo size={36} textClassName="text-base" />
         </Link>
         <div className="flex items-center gap-2">
-          <KakaoInquiryButton size="sm" label="카톡 문의" className="hidden sm:inline-flex" />
+          {/* 기본 클래스의 inline-flex가 hidden을 이기므로 max-sm:hidden으로 숨겨야 함 */}
+          <KakaoInquiryButton size="sm" label="카톡 문의" className="max-sm:hidden" />
           <Link href="/client/login">
             <Button variant="ghost" className="font-medium">업체 로그인</Button>
           </Link>
