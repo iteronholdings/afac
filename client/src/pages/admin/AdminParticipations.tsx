@@ -228,7 +228,7 @@ export default function AdminParticipations() {
 
   /**
    * 캠페인별 참여 리뷰어 엑셀 다운로드 (업체 배송용).
-   * 인쇄 시 테두리가 잘리지 않게 A열·1행을 비워 B2부터 시작한다.
+   * 1행 헤더부터 시작하고 A열에 리뷰어 순번(1, 2, 3…)을 매긴다.
    * 송장번호(G열)는 업체가 채워 보내는 용도라 공란으로 내보낸다.
    */
   const downloadExcel = (group: { campaignId: number; title: string; rows: typeof filtered }) => {
@@ -238,10 +238,9 @@ export default function AdminParticipations() {
       return;
     }
     const wsData: (string | number)[][] = [
-      [], // 1행 공백
-      ["", "상품명", "리뷰어 성함", "상품 최종구매 금액", "연락처", "주소", "송장번호"],
-      ...active.map(r => [
-        "", // A열 공백
+      ["번호", "상품명", "리뷰어 성함", "상품 최종구매 금액", "연락처", "주소", "송장번호"],
+      ...active.map((r, i) => [
+        i + 1, // A열: 리뷰어 순번
         r.campaign?.title ?? group.title,
         r.user?.fullName ?? "-",
         r.campaign?.productPrice ?? 0, // 리뷰 수수료 제외, 상품 최종판매가만
@@ -251,7 +250,7 @@ export default function AdminParticipations() {
       ]),
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws["!cols"] = [{ wch: 3 }, { wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 15 }, { wch: 42 }, { wch: 14 }];
+    ws["!cols"] = [{ wch: 6 }, { wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 15 }, { wch: 42 }, { wch: 14 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "참여리뷰어");
     const safeTitle = group.title.replace(/[\\/:*?"<>|]/g, " ").trim() || "캠페인";
