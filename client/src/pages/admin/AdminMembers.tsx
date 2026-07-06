@@ -183,6 +183,9 @@ export default function AdminMembers() {
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
                     <p>{m.phone || "-"}</p>
+                    {!m.address && m.role === "user" && (
+                      <p className="mt-0.5 text-xs text-muted-foreground/60">주소 미등록</p>
+                    )}
                     {m.address && (
                       <Popover>
                         <PopoverTrigger asChild>

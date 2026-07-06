@@ -107,8 +107,14 @@ export const participationRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: "이미 참여 신청한 캠페인입니다." });
       }
 
-      // 중복 계정(부계정) 차단: 같은 전화번호로 이미 참여 중이면 거절.
       const me = await db.getUserById(ctx.user.id);
+
+      // 택배 수령 주소 미등록이면 참여 불가 (기존 회원은 접속 시 주소 등록 모달로 유도됨).
+      if (!me?.address) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "택배 수령 주소를 먼저 등록해 주세요. (프로필 → 내 정보)" });
+      }
+
+      // 중복 계정(부계정) 차단: 같은 전화번호로 이미 참여 중이면 거절.
       if (me?.phone) {
         const dup = await db.countCampaignParticipantsByPhone(input.campaignId, me.phone, ctx.user.id);
         if (dup > 0) {

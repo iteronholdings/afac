@@ -13,6 +13,7 @@ import { trpc } from "@/lib/trpc";
 import { Building2, ClipboardList, LayoutDashboard, ListChecks, LogOut, Menu, MessageCircle, Settings, UserRound } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
+import AddressRequiredDialog from "@/components/AddressRequiredDialog";
 import BrandLogo from "@/components/BrandLogo";
 import KakaoInquiryButton from "@/components/KakaoInquiryButton";
 import ReviewerGuide from "@/components/ReviewerGuide";
@@ -211,6 +212,9 @@ export default function SiteHeader() {
           <ReviewerGuide />
         </DialogContent>
       </Dialog>
+
+      {/* 주소 미등록 리뷰어(기존 회원)에게 택배 수령 주소 등록 요구 */}
+      <AddressRequiredDialog />
     </header>
   );
 }
