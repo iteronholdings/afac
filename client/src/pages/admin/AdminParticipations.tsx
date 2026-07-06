@@ -26,9 +26,131 @@ import {
   STATUS_LABEL,
   totalPayout,
 } from "@/lib/workflow";
-import { CheckCircle2, ChevronDown, ChevronRight, Inbox, MessageCircle, Phone, Trash2, Wallet } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronRight, FileSpreadsheet, Inbox, MessageCircle, Phone, Trash2, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
+
+/** listAll 응답 중 참여자 목록 렌더에 필요한 필드 (경량 페이로드 + 인증샷 존재 플래그). */
+type ListRow = {
+  id: number;
+  campaignId: number;
+  status: string;
+  hasSearchProof: boolean;
+  hasPurchaseProof: boolean;
+  hasReviewProof: boolean;
+  campaign: { id: number; title: string; productPrice: number; commission: number } | null;
+  user: { id: number; fullName: string | null; loginId: string | null; phone: string | null; address: string | null } | null;
+};
+
+/** 캠페인 그룹의 참여자 행들. 인증샷(무거움)은 이 컴포넌트가 뜰 때(=펼침) 캠페인 단위로 따로 불러온다. */
+function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePending, onRemove }: {
+  campaignId: number;
+  rows: ListRow[];
+  dmUnreadSet: Set<number>;
+  act: (participationId: number, status: ParticipationStatus) => void;
+  actPending: boolean;
+  removePending: boolean;
+  onRemove: (target: { id: number; name: string }) => void;
+}) {
+  const { data: proofs, isLoading: proofsLoading } = trpc.participation.proofsByCampaign.useQuery({ campaignId });
+  const proofMap = useMemo(() => new Map((proofs ?? []).map(p => [p.id, p])), [proofs]);
+
+  return (
+    <div className="divide-y divide-border/60 border-t border-border/60">
+      {rows.map(r => {
+        const status = r.status as ParticipationStatus;
+        const payout = r.campaign ? totalPayout(r.campaign.productPrice, r.campaign.commission) : 0;
+        const pf = proofMap.get(r.id);
+        const waitingProofs = proofsLoading && (r.hasSearchProof || r.hasPurchaseProof || r.hasReviewProof);
+        return (
+          <div key={r.id} className="grid gap-4 p-4 md:grid-cols-[1fr_auto]">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_BADGE[status]}`}>
+                  {STATUS_LABEL[status]}
+                </span>
+                <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
+                  <span>
+                    <b className="text-foreground">{r.user?.fullName ?? "-"}</b> ({r.user?.loginId ?? "-"})
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Phone className="h-3.5 w-3.5" /> {r.user?.phone ?? "-"}
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <Wallet className="h-3.5 w-3.5" /> 지급 예정 {formatKRW(payout)}
+                  </span>
+                </div>
+              </div>
+
+              {waitingProofs ? (
+                <div className="grid max-w-lg grid-cols-3 gap-3">
+                  {[0, 1, 2].map(i => <div key={i} className="h-24 animate-pulse rounded-xl bg-muted" />)}
+                </div>
+              ) : (
+                <div className="grid max-w-lg grid-cols-3 gap-3">
+                  <ProofThumb url={pf?.searchProofUrl} label="검색 인증샷" />
+                  <ProofThumb url={pf?.purchaseProofUrl} label="구매 인증샷" />
+                  <ProofThumb url={pf?.reviewProofUrl} label="리뷰 인증샷" />
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-2 md:w-44">
+              {status === "reviewed" && (
+                <Button size="sm" disabled={actPending} onClick={() => act(r.id, "approved")}>
+                  <CheckCircle2 className="mr-1.5 h-4 w-4" /> 지급 확정
+                </Button>
+              )}
+              {status === "approved" && (
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={actPending} onClick={() => act(r.id, "paid")}>
+                  <Wallet className="mr-1.5 h-4 w-4" /> 입금 완료 처리
+                </Button>
+              )}
+              {status === "paid" && (
+                <span className="rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-semibold text-emerald-700">정산 완료</span>
+              )}
+              {status === "applied" && (
+                <span className="rounded-xl bg-muted px-3 py-2 text-center text-xs text-muted-foreground">검색 인증 대기 중</span>
+              )}
+              {status === "searched" && (
+                <span className="rounded-xl bg-muted px-3 py-2 text-center text-xs text-muted-foreground">구매 인증 대기 중</span>
+              )}
+              {status === "purchased" && (
+                <span className="rounded-xl bg-muted px-3 py-2 text-center text-xs text-muted-foreground">리뷰 인증 대기 중</span>
+              )}
+              {status === "rejected" && (
+                <Button size="sm" variant="outline" className="bg-card" disabled={actPending} onClick={() => act(r.id, "applied")}>
+                  반려 취소
+                </Button>
+              )}
+              {status !== "paid" && (
+                <Button size="sm" variant="outline" className="bg-card text-destructive hover:text-destructive" disabled={removePending}
+                  onClick={() => onRemove({ id: r.id, name: r.user?.fullName ?? "리뷰어" })}>
+                  <Trash2 className="mr-1.5 h-4 w-4" /> 삭제
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="outline"
+                className="relative bg-card"
+                disabled={!r.user?.id}
+                onClick={() => r.user?.id && window.dispatchEvent(
+                  new CustomEvent("open-dm", { detail: { reviewerId: r.user.id, reviewerName: r.user.fullName } })
+                )}
+              >
+                <MessageCircle className="mr-1.5 h-4 w-4" /> 채팅
+                {dmUnreadSet.has(r.user?.id ?? -1) && (
+                  <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-red-500" />
+                )}
+              </Button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 const STATUS_FILTERS: { value: string; label: string }[] = [
   { value: "all", label: "전체 상태" },
@@ -44,7 +166,8 @@ const STATUS_FILTERS: { value: string; label: string }[] = [
 export default function AdminParticipations() {
   const utils = trpc.useUtils();
   const { data, isLoading } = trpc.participation.listAll.useQuery(undefined);
-  const { data: campaigns } = trpc.campaign.listAll.useQuery();
+  // 필터 드롭다운용 — 썸네일까지 실려 오는 campaign.listAll 대신 id·제목만 가볍게.
+  const { data: campaigns } = trpc.campaign.titles.useQuery();
 
   const [campaignFilter, setCampaignFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -102,6 +225,39 @@ export default function AdminParticipations() {
     }
     return Array.from(map.entries()).map(([id, v]) => ({ campaignId: id, ...v }));
   }, [filtered]);
+
+  /**
+   * 캠페인별 참여 리뷰어 엑셀 다운로드 (업체 배송용).
+   * 인쇄 시 테두리가 잘리지 않게 A열·1행을 비워 B2부터 시작한다.
+   * 송장번호(G열)는 업체가 채워 보내는 용도라 공란으로 내보낸다.
+   */
+  const downloadExcel = (group: { campaignId: number; title: string; rows: typeof filtered }) => {
+    const active = group.rows.filter(r => r.status !== "rejected");
+    if (active.length === 0) {
+      toast.error("내보낼 참여자가 없습니다.");
+      return;
+    }
+    const wsData: (string | number)[][] = [
+      [], // 1행 공백
+      ["", "상품명", "리뷰어 성함", "상품 최종구매 금액", "연락처", "주소", "송장번호"],
+      ...active.map(r => [
+        "", // A열 공백
+        r.campaign?.title ?? group.title,
+        r.user?.fullName ?? "-",
+        r.campaign?.productPrice ?? 0, // 리뷰 수수료 제외, 상품 최종판매가만
+        r.user?.phone ?? "-",
+        r.user?.address ?? "-",
+        "", // 송장번호: 공란 (업체가 입력)
+      ]),
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    ws["!cols"] = [{ wch: 3 }, { wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 15 }, { wch: 42 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "참여리뷰어");
+    const safeTitle = group.title.replace(/[\\/:*?"<>|]/g, " ").trim() || "캠페인";
+    XLSX.writeFile(wb, `${safeTitle}_참여리뷰어_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    toast.success("엑셀 파일이 다운로드됩니다.");
+  };
 
   const toggleCampaign = (id: number) => {
     setExpandedCampaigns(prev => {
@@ -174,116 +330,41 @@ export default function AdminParticipations() {
             return (
               <div key={group.campaignId} className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
                 {/* 캠페인 헤더 */}
-                <button
-                  className="flex w-full items-center justify-between gap-3 px-5 py-3.5 text-left hover:bg-muted/40 transition-colors"
-                  onClick={() => toggleCampaign(group.campaignId)}
-                >
-                  <div className="flex items-center gap-2.5">
-                    {isOpen
-                      ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                      : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                    }
-                    <span className="font-bold text-foreground">{group.title}</span>
-                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                      {group.rows.length}명
+                <div className="flex items-center gap-2 px-5 py-3.5 hover:bg-muted/40 transition-colors">
+                  <button
+                    className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+                    onClick={() => toggleCampaign(group.campaignId)}
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      {isOpen
+                        ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                        : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      }
+                      <span className="truncate font-bold text-foreground">{group.title}</span>
+                      <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                        {group.rows.length}명
+                      </span>
+                    </div>
+                    <span className="hidden text-xs text-muted-foreground shrink-0 sm:inline">
+                      완료 {group.rows.filter(r => r.status === "paid").length} / 확정 {group.rows.filter(r => r.status === "approved").length} / 검수중 {group.rows.filter(r => r.status === "reviewed").length}
                     </span>
-                  </div>
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    완료 {group.rows.filter(r => r.status === "paid").length} / 확정 {group.rows.filter(r => r.status === "approved").length} / 검수중 {group.rows.filter(r => r.status === "reviewed").length}
-                  </span>
-                </button>
+                  </button>
+                  <Button size="sm" variant="outline" className="shrink-0 bg-card" onClick={() => downloadExcel(group)}>
+                    <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> 엑셀
+                  </Button>
+                </div>
 
-                {/* 참여자 목록 */}
+                {/* 참여자 목록 — 인증샷은 펼쳤을 때만 지연 로딩 */}
                 {isOpen && (
-                  <div className="divide-y divide-border/60 border-t border-border/60">
-                    {group.rows.map(r => {
-                      const status = r.status as ParticipationStatus;
-                      const payout = r.campaign
-                        ? totalPayout(r.campaign.productPrice, r.campaign.commission)
-                        : 0;
-                      return (
-                        <div
-                          key={r.id}
-                          className="grid gap-4 p-4 md:grid-cols-[1fr_auto]"
-                        >
-                          <div className="space-y-3">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_BADGE[status]}`}>
-                                {STATUS_LABEL[status]}
-                              </span>
-                              <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
-                                <span>
-                                  <b className="text-foreground">{r.user?.fullName ?? "-"}</b> ({r.user?.loginId ?? "-"})
-                                </span>
-                                <span className="inline-flex items-center gap-1">
-                                  <Phone className="h-3.5 w-3.5" /> {r.user?.phone ?? "-"}
-                                </span>
-                                <span className="inline-flex items-center gap-1">
-                                  <Wallet className="h-3.5 w-3.5" /> 지급 예정 {formatKRW(payout)}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="grid max-w-lg grid-cols-3 gap-3">
-                              <ProofThumb url={r.searchProofUrl} label="검색 인증샷" />
-                              <ProofThumb url={r.purchaseProofUrl} label="구매 인증샷" />
-                              <ProofThumb url={r.reviewProofUrl} label="리뷰 인증샷" />
-                            </div>
-                          </div>
-
-                          <div className="flex flex-col gap-2 md:w-44">
-                            {status === "reviewed" && (
-                              <Button size="sm" disabled={setStatusMutation.isPending} onClick={() => act(r.id, "approved")}>
-                                <CheckCircle2 className="mr-1.5 h-4 w-4" /> 지급 확정
-                              </Button>
-                            )}
-                            {status === "approved" && (
-                              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={setStatusMutation.isPending} onClick={() => act(r.id, "paid")}>
-                                <Wallet className="mr-1.5 h-4 w-4" /> 입금 완료 처리
-                              </Button>
-                            )}
-                            {status === "paid" && (
-                              <span className="rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-semibold text-emerald-700">정산 완료</span>
-                            )}
-                            {status === "applied" && (
-                              <span className="rounded-xl bg-muted px-3 py-2 text-center text-xs text-muted-foreground">검색 인증 대기 중</span>
-                            )}
-                            {status === "searched" && (
-                              <span className="rounded-xl bg-muted px-3 py-2 text-center text-xs text-muted-foreground">구매 인증 대기 중</span>
-                            )}
-                            {status === "purchased" && (
-                              <span className="rounded-xl bg-muted px-3 py-2 text-center text-xs text-muted-foreground">리뷰 인증 대기 중</span>
-                            )}
-                            {status === "rejected" && (
-                              <Button size="sm" variant="outline" className="bg-card" disabled={setStatusMutation.isPending} onClick={() => act(r.id, "applied")}>
-                                반려 취소
-                              </Button>
-                            )}
-                            {status !== "paid" && (
-                              <Button size="sm" variant="outline" className="bg-card text-destructive hover:text-destructive" disabled={removeMutation.isPending}
-                                onClick={() => setRemoveTarget({ id: r.id, name: r.user?.fullName ?? "리뷰어" })}>
-                                <Trash2 className="mr-1.5 h-4 w-4" /> 삭제
-                              </Button>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="relative bg-card"
-                              disabled={!r.user?.id}
-                              onClick={() => r.user?.id && window.dispatchEvent(
-                                new CustomEvent("open-dm", { detail: { reviewerId: r.user.id, reviewerName: r.user.fullName } })
-                              )}
-                            >
-                              <MessageCircle className="mr-1.5 h-4 w-4" /> 채팅
-                              {dmUnreadSet.has(r.user?.id ?? -1) && (
-                                <span className="absolute -right-1 -top-1 flex h-3 w-3 items-center justify-center rounded-full bg-red-500" />
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <CampaignRows
+                    campaignId={group.campaignId}
+                    rows={group.rows}
+                    dmUnreadSet={dmUnreadSet}
+                    act={act}
+                    actPending={setStatusMutation.isPending}
+                    removePending={removeMutation.isPending}
+                    onRemove={setRemoveTarget}
+                  />
                 )}
               </div>
             );

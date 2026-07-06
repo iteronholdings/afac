@@ -721,6 +721,64 @@ export async function listParticipationsByUser(userId: number) {
     .orderBy(desc(participations.appliedAt));
 }
 
+/**
+ * 관리자 참여현황용 경량 조회 — 인증샷·패킷·원고(LONGTEXT)는 빼고 존재 플래그만 내려
+ * 원격 DB 왕복과 응답 크기를 최소화한다. 인증샷은 proofsByCampaign으로 지연 로딩.
+ */
+export async function listParticipationsLite(opts?: { campaignId?: number }) {
+  const db = await getDb();
+  if (!db) return [];
+  const cols = {
+    id: participations.id,
+    campaignId: participations.campaignId,
+    userId: participations.userId,
+    status: participations.status,
+    reviewType: participations.reviewType,
+    assignedDate: participations.assignedDate,
+    assignedName: participations.assignedName,
+    adminMemo: participations.adminMemo,
+    appliedAt: participations.appliedAt,
+    approvedAt: participations.approvedAt,
+    paidAt: participations.paidAt,
+    hasSearchProof: sql<number>`(${participations.searchProofUrl} IS NOT NULL)`,
+    hasPurchaseProof: sql<number>`(${participations.purchaseProofUrl} IS NOT NULL)`,
+    hasReviewProof: sql<number>`(${participations.reviewProofUrl} IS NOT NULL)`,
+    hasPacket: sql<number>`(${participations.assignedPacket} IS NOT NULL)`,
+  };
+  if (opts?.campaignId) {
+    return db.select(cols).from(participations)
+      .where(eq(participations.campaignId, opts.campaignId))
+      .orderBy(desc(participations.appliedAt));
+  }
+  return db.select(cols).from(participations).orderBy(desc(participations.appliedAt));
+}
+
+/** 특정 캠페인 참여자들의 인증샷만 (참여현황 지연 로딩용). */
+export async function listProofsByCampaign(campaignId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: participations.id,
+    searchProofUrl: participations.searchProofUrl,
+    purchaseProofUrl: participations.purchaseProofUrl,
+    reviewProofUrl: participations.reviewProofUrl,
+  }).from(participations).where(eq(participations.campaignId, campaignId));
+}
+
+/** 캠페인 경량 목록 — photoGuideZip(레거시 base64) 등 무거운 필드를 SQL 단계에서 제외. */
+export async function listCampaignsLite() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: campaigns.id,
+    title: campaigns.title,
+    keyword: campaigns.keyword,
+    productPrice: campaigns.productPrice,
+    commission: campaigns.commission,
+    status: campaigns.status,
+  }).from(campaigns);
+}
+
 /** All participations (admin view), optionally filtered by campaign and/or status. */
 export async function listParticipations(opts?: { campaignId?: number; status?: string }) {
   const db = await getDb();

@@ -242,21 +242,36 @@ export const participationRouter = router({
   listAll: adminProcedure
     .input(z.object({ campaignId: z.number().int().optional() }).optional())
     .query(async ({ input }) => {
-      const parts = await db.listParticipations({ campaignId: input?.campaignId });
-      return Promise.all(
-        parts.map(async p => {
-          const campaign = await db.getCampaignById(p.campaignId);
-          const user = await db.getUserById(p.userId);
-          return {
-            ...p,
-            campaign,
-            user: user
-              ? { id: user.id, fullName: user.fullName, loginId: user.loginId, phone: user.phone }
-              : null,
-          };
-        })
-      );
+      // 경량 조회: 인증샷·패킷·원고(LONGTEXT)는 SQL 단계에서 제외하고 존재 플래그만.
+      // N+1 제거: 회원·캠페인도 한 번씩만 읽어 매핑. 인증샷은 proofsByCampaign으로 지연 로딩.
+      const [parts, allUsers, allCampaigns] = await Promise.all([
+        db.listParticipationsLite({ campaignId: input?.campaignId }),
+        db.listAllUsers(),
+        db.listCampaignsLite(),
+      ]);
+      const userMap = new Map(allUsers.map(u => [u.id, u]));
+      const campMap = new Map(allCampaigns.map(c => [c.id, c]));
+      return parts.map(p => {
+        const c = campMap.get(p.campaignId);
+        const u = userMap.get(p.userId);
+        return {
+          ...p,
+          hasSearchProof: !!p.hasSearchProof,
+          hasPurchaseProof: !!p.hasPurchaseProof,
+          hasReviewProof: !!p.hasReviewProof,
+          hasPacket: !!p.hasPacket,
+          campaign: c ?? null,
+          user: u
+            ? { id: u.id, fullName: u.fullName, loginId: u.loginId, phone: u.phone, address: u.address ?? null }
+            : null,
+        };
+      });
     }),
+
+  /** Admin: 캠페인 참여자들의 인증샷 (참여현황 목록을 가볍게 유지하기 위한 지연 로딩). */
+  proofsByCampaign: adminProcedure
+    .input(z.object({ campaignId: z.number().int() }))
+    .query(async ({ input }) => db.listProofsByCampaign(input.campaignId)),
 
   // Admin: set status (approved / paid / rejected / back to a prior step).
   setStatus: adminProcedure

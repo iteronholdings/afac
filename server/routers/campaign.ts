@@ -300,6 +300,12 @@ export const campaignRouter = router({
     return withCounts;
   }),
 
+  /** Admin: 캠페인 id·제목만 — 참여현황 필터 드롭다운용 (썸네일 등 무거운 필드 제외). */
+  titles: adminProcedure.query(async () => {
+    const rows = await db.listCampaignsLite();
+    return rows.map(c => ({ id: c.id, title: c.title }));
+  }),
+
   // Admin: create.
   create: adminProcedure
     .input(campaignInput)
