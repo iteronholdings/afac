@@ -301,6 +301,44 @@ export const participationRouter = router({
       return db.updateParticipation(input.participationId, patch);
     }),
 
+  /**
+   * Admin: 인증샷 반려 — 해당 인증샷을 지우고 그 단계 직전 상태로 되돌려 재등록을 요구한다.
+   * 리뷰어에게는 운영팀 채팅으로 자동 안내를 보낸다.
+   */
+  rejectProof: adminProcedure
+    .input(z.object({
+      participationId: z.number().int(),
+      kind: z.enum(["search", "purchase", "review"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const p = await db.getParticipationById(input.participationId);
+      if (!p) throw new TRPCError({ code: "NOT_FOUND", message: "참여 내역을 찾을 수 없습니다." });
+      if (["approved", "paid", "rejected"].includes(p.status)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "지급 확정·완료된 참여는 인증샷을 반려할 수 없습니다. 상태를 먼저 되돌려 주세요." });
+      }
+      const plan = {
+        search: { has: p.searchProofUrl, patch: { searchProofUrl: null, status: "applied" as const }, label: "검색 인증샷" },
+        purchase: { has: p.purchaseProofUrl, patch: { purchaseProofUrl: null, status: "searched" as const }, label: "구매 인증샷" },
+        review: { has: p.reviewProofUrl, patch: { reviewProofUrl: null, status: "purchased" as const }, label: "리뷰 인증샷" },
+      }[input.kind];
+      if (!plan.has) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "반려할 인증샷이 없습니다." });
+      }
+      await db.updateParticipation(input.participationId, plan.patch);
+      // 리뷰어에게 운영팀 채팅으로 재등록 안내 (실패해도 반려 자체는 유지)
+      try {
+        const campaign = await db.getCampaignById(p.campaignId);
+        await db.createDirectMessage({
+          reviewerId: p.userId,
+          fromUserId: ctx.user.id,
+          content: `[자동 안내] '${campaign?.title ?? "캠페인"}'의 ${plan.label}이 반려되었습니다. 내 활동에서 다시 등록해 주세요.`,
+        });
+      } catch (e) {
+        console.error("[rejectProof] 리뷰어 안내 메시지 실패:", e);
+      }
+      return { success: true as const };
+    }),
+
   // Admin: 참여 삭제 — 반려와 달리 행을 지워 정원·사진 유닛을 즉시 회수한다.
   remove: adminProcedure
     .input(z.object({ participationId: z.number().int() }))

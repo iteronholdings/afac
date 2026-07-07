@@ -1,18 +1,22 @@
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { ImageOff } from "lucide-react";
+import { ImageOff, XCircle } from "lucide-react";
 import { useState } from "react";
 
 export function ProofThumb({
   url,
   label,
+  onReject,
 }: {
   url: string | null | undefined;
   label: string;
+  /** (관리자) 확대 보기에서 이 인증샷을 반려할 때 호출 — 없으면 버튼 미표시. */
+  onReject?: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -44,6 +48,15 @@ export function ProofThumb({
             <DialogTitle>{label}</DialogTitle>
           </DialogHeader>
           <img src={url} alt={label} className="max-h-[70vh] w-full rounded-xl object-contain" />
+          {onReject && (
+            <Button
+              variant="outline"
+              className="w-full gap-1.5 bg-card font-semibold text-destructive hover:text-destructive"
+              onClick={() => { setOpen(false); onReject(); }}
+            >
+              <XCircle className="h-4 w-4" /> 이 인증샷 반려하기 (재등록 요청)
+            </Button>
+          )}
         </DialogContent>
       </Dialog>
     </>

@@ -56,6 +56,18 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
   const { data: proofs, isLoading: proofsLoading } = trpc.participation.proofsByCampaign.useQuery({ campaignId });
   const proofMap = useMemo(() => new Map((proofs ?? []).map(p => [p.id, p])), [proofs]);
 
+  // 인증샷 반려 — 확대 보기에서 반려 클릭 → 확인 후 해당 인증샷 삭제·단계 롤백
+  const utils = trpc.useUtils();
+  const [proofReject, setProofReject] = useState<{ id: number; kind: "search" | "purchase" | "review"; label: string; name: string } | null>(null);
+  const rejectProof = trpc.participation.rejectProof.useMutation({
+    onSuccess: () => {
+      utils.participation.listAll.invalidate();
+      utils.participation.proofsByCampaign.invalidate({ campaignId });
+      toast.success("인증샷을 반려했어요. 리뷰어에게 재등록 안내를 보냈습니다.");
+    },
+    onError: e => toast.error(e.message),
+  });
+
   return (
     <div className="divide-y divide-border/60 border-t border-border/60">
       {rows.map(r => {
@@ -89,9 +101,12 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
                 </div>
               ) : (
                 <div className="grid max-w-lg grid-cols-3 gap-3">
-                  <ProofThumb url={pf?.searchProofUrl} label="검색 인증샷" />
-                  <ProofThumb url={pf?.purchaseProofUrl} label="구매 인증샷" />
-                  <ProofThumb url={pf?.reviewProofUrl} label="리뷰 인증샷" />
+                  <ProofThumb url={pf?.searchProofUrl} label="검색 인증샷"
+                    onReject={() => setProofReject({ id: r.id, kind: "search", label: "검색 인증샷", name: r.user?.fullName ?? "리뷰어" })} />
+                  <ProofThumb url={pf?.purchaseProofUrl} label="구매 인증샷"
+                    onReject={() => setProofReject({ id: r.id, kind: "purchase", label: "구매 인증샷", name: r.user?.fullName ?? "리뷰어" })} />
+                  <ProofThumb url={pf?.reviewProofUrl} label="리뷰 인증샷"
+                    onReject={() => setProofReject({ id: r.id, kind: "review", label: "리뷰 인증샷", name: r.user?.fullName ?? "리뷰어" })} />
                 </div>
               )}
             </div>
@@ -148,6 +163,33 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
           </div>
         );
       })}
+
+      {/* 인증샷 반려 확인 */}
+      <AlertDialog open={proofReject !== null} onOpenChange={o => !o && setProofReject(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{proofReject?.label}을 반려할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <span className="font-medium text-foreground">{proofReject?.name}</span> 님의 {proofReject?.label}이
+              삭제되고 해당 단계부터 다시 진행해야 합니다. 리뷰어에게는 운영팀 채팅으로
+              재등록 안내가 자동 발송됩니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={rejectProof.isPending}>취소</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={rejectProof.isPending}
+              onClick={() => {
+                if (proofReject) rejectProof.mutate({ participationId: proofReject.id, kind: proofReject.kind });
+                setProofReject(null);
+              }}
+            >
+              반려하기
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
