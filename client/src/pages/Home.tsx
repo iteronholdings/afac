@@ -203,8 +203,10 @@ export default function Home() {
                             </span>
                             <span className="inline-flex items-center gap-1">
                               <Wallet className="h-3 w-3 text-primary" />
-                              {formatKRW(totalPayout(c.productPrice, c.commission))}
+                              상품가 <b className="text-foreground">{formatKRW(c.productPrice)}</b>
                             </span>
+                            <span>작업수당 {formatKRW(c.commission)}</span>
+                            <span>총 지급 <b className="text-primary">{formatKRW(totalPayout(c.productPrice, c.commission))}</b></span>
                           </div>
                         )}
                         <div className="mt-1">
