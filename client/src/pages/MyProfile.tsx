@@ -1,7 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import AddressSearchInput from "@/components/AddressSearchInput";
 import SiteHeader from "@/components/SiteHeader";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { CreditCard, IdCard, Loader2, MapPin, Phone, UserRound } from "lucide-react";
@@ -59,15 +59,12 @@ export default function MyProfile() {
           </div>
 
           <div className="border-t border-border/60 pt-5">
-            <Label htmlFor="address" className="flex items-center gap-1.5"><MapPin className="h-4 w-4 text-primary" /> 주소<span className="text-xs font-normal text-muted-foreground">(택배 수령용)</span></Label>
-            <div className="mt-2 flex gap-2">
-              <Input
-                id="address" placeholder="예: 부산 해운대구 반여로 96, 101동 101호" maxLength={255}
-                value={address} onChange={e => setAddress(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter" && dirty && address.trim()) save.mutate({ address: address.trim() }); }}
-                className="h-11 flex-1"
-              />
-              <Button className="h-11 shrink-0 font-bold" disabled={save.isPending || !dirty || !address.trim()}
+            <Label className="flex items-center gap-1.5"><MapPin className="h-4 w-4 text-primary" /> 주소<span className="text-xs font-normal text-muted-foreground">(택배 수령용)</span></Label>
+            <div className="mt-2">
+              <AddressSearchInput value={address} onChange={setAddress} />
+            </div>
+            <div className="mt-2 flex justify-end">
+              <Button className="h-10 shrink-0 font-bold" disabled={save.isPending || !dirty || !address.trim()}
                 onClick={() => save.mutate({ address: address.trim() })}>
                 {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "저장"}
               </Button>

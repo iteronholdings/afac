@@ -1,4 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
+import AddressSearchInput from "@/components/AddressSearchInput";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -7,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { Loader2, MapPin } from "lucide-react";
 import { useState } from "react";
@@ -56,17 +56,10 @@ export default function AddressRequiredDialog() {
             이후 내 정보에서 언제든 수정할 수 있습니다.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex gap-2">
-          <Input
-            autoFocus placeholder="예: 부산 해운대구 반여로 96, 101동 101호" maxLength={255}
-            value={address} onChange={e => setAddress(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") submit(); }}
-            className="h-11 flex-1"
-          />
-          <Button className="h-11 shrink-0 font-bold" disabled={save.isPending} onClick={submit}>
-            {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "저장"}
-          </Button>
-        </div>
+        <AddressSearchInput value={address} onChange={setAddress} />
+        <Button className="h-11 w-full font-bold" disabled={save.isPending || !address.trim()} onClick={submit}>
+          {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "주소 저장"}
+        </Button>
       </DialogContent>
     </Dialog>
   );

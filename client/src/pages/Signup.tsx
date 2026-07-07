@@ -1,3 +1,4 @@
+import AddressSearchInput from "@/components/AddressSearchInput";
 import AuthLayout from "@/components/AuthLayout";
 import PhoneVerifyInput from "@/components/PhoneVerifyInput";
 import PrivacyConsent from "@/components/PrivacyConsent";
@@ -6,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
-import { CreditCard, IdCard, Loader2, Lock, MapPin, User } from "lucide-react";
+import { CreditCard, IdCard, Loader2, Lock, User } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
@@ -143,11 +144,11 @@ export default function Signup() {
         />
 
         <div className="space-y-2">
-          <Label htmlFor="address">주소<span className="ml-1 text-xs font-normal text-muted-foreground">(택배 수령용)</span></Label>
-          <div className="relative">
-            <MapPin className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input id="address" autoComplete="street-address" placeholder="예: 부산 해운대구 반여로 96, 101동 101호" value={form.address} onChange={update("address")} className="h-11 pl-9" />
-          </div>
+          <Label>주소<span className="ml-1 text-xs font-normal text-muted-foreground">(택배 수령용)</span></Label>
+          <AddressSearchInput
+            value={form.address}
+            onChange={v => setForm(prev => ({ ...prev, address: v }))}
+          />
         </div>
 
         <div className="space-y-3 rounded-2xl border border-border/70 bg-secondary/30 p-4">
