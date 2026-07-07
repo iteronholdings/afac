@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { notifyReviewerChatSms } from "../chatNotify";
 import * as db from "../db";
 import { sendPushToUser } from "../webpush";
 import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
@@ -54,6 +55,8 @@ export const directMessageRouter = router({
       const senderName = ctx.user.fullName || ctx.user.name || "상대방";
       if (ctx.user.role === "admin") {
         void sendPushToUser(reviewerId, { title: "💬 운영팀 메시지", body: preview, url: "/my" });
+        // 웹푸시는 구독률이 낮아 문자로도 알림 (리뷰어당 30분 1회)
+        void notifyReviewerChatSms(reviewerId);
       } else {
         const admins = (await db.listAllUsers()).filter(u => u.role === "admin");
         for (const a of admins) void sendPushToUser(a.id, { title: `💬 ${senderName}`, body: preview, url: "/admin" });

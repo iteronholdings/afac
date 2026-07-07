@@ -1,6 +1,7 @@
 import { isCompleteAddress, PARTICIPATION_DEADLINE_DAYS, participationDeadline } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { notifyReviewerChatSms } from "../chatNotify";
 import * as db from "../db";
 import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
 import { assignPacketsForCampaign } from "./campaign";
@@ -333,6 +334,7 @@ export const participationRouter = router({
           fromUserId: ctx.user.id,
           content: `[자동 안내] '${campaign?.title ?? "캠페인"}'의 제출 기한이 ${PARTICIPATION_DEADLINE_DAYS}일 연장되었습니다. (새 마감: ${dstr}) 기한 내에 리뷰 인증샷까지 등록해 주세요.`,
         });
+        void notifyReviewerChatSms(p.userId);
       } catch (e) {
         console.error("[extendDeadline] 안내 메시지 실패:", e);
       }
@@ -371,6 +373,7 @@ export const participationRouter = router({
           fromUserId: ctx.user.id,
           content: `[자동 안내] '${campaign?.title ?? "캠페인"}'의 ${plan.label}이 반려되었습니다. 내 활동에서 다시 등록해 주세요.`,
         });
+        void notifyReviewerChatSms(p.userId);
       } catch (e) {
         console.error("[rejectProof] 리뷰어 안내 메시지 실패:", e);
       }
