@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
+import { isCompleteAddress } from "@shared/const";
 import { Loader2, MapPin } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -29,8 +30,10 @@ export default function AddressRequiredDialog() {
     onError: e => toast.error(e.message),
   });
 
-  const open = !!user && user.role === "user" && !user.address;
+  // 주소가 없거나, 우편번호 검색 도입 전 자유 입력된 구형식 주소면 재등록 요구.
+  const open = !!user && user.role === "user" && !isCompleteAddress(user.address);
   if (!open) return null;
+  const isReRegister = !!user.address;
 
   const submit = () => {
     if (!address.trim()) {
@@ -49,11 +52,17 @@ export default function AddressRequiredDialog() {
       >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-primary" /> 택배 수령 주소를 등록해 주세요
+            <MapPin className="h-5 w-5 text-primary" />
+            {isReRegister ? "주소를 다시 등록해 주세요" : "택배 수령 주소를 등록해 주세요"}
           </DialogTitle>
           <DialogDescription>
-            캠페인 상품 발송을 위해 주소가 꼭 필요해요. 한 번만 등록하면 되고,
-            이후 내 정보에서 언제든 수정할 수 있습니다.
+            {isReRegister ? (
+              <>정확한 택배 발송을 위해 <b className="text-foreground">우편번호 검색</b>으로 주소를
+              다시 등록해 주세요. (기존 입력: {user.address})</>
+            ) : (
+              <>캠페인 상품 발송을 위해 주소가 꼭 필요해요. 한 번만 등록하면 되고,
+              이후 내 정보에서 언제든 수정할 수 있습니다.</>
+            )}
           </DialogDescription>
         </DialogHeader>
         <AddressSearchInput value={address} onChange={setAddress} />

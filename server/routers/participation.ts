@@ -1,3 +1,4 @@
+import { isCompleteAddress } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
@@ -109,9 +110,9 @@ export const participationRouter = router({
 
       const me = await db.getUserById(ctx.user.id);
 
-      // 택배 수령 주소 미등록이면 참여 불가 (기존 회원은 접속 시 주소 등록 모달로 유도됨).
-      if (!me?.address) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "택배 수령 주소를 먼저 등록해 주세요. (프로필 → 내 정보)" });
+      // 택배 수령 주소가 없거나 구형식(우편번호 없음)이면 참여 불가 — 접속 시 등록 모달로 유도됨.
+      if (!isCompleteAddress(me?.address)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "택배 수령 주소를 우편번호 검색으로 먼저 등록해 주세요. (프로필 → 내 정보)" });
       }
 
       // 중복 계정(부계정) 차단: 같은 전화번호로 이미 참여 중이면 거절.
