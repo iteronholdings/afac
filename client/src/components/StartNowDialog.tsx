@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { formatKRW, mallName } from "@/lib/workflow";
 import { PARTICIPATION_DEADLINE_DAYS } from "@shared/const";
-import { Camera, Copy, PartyPopper, Search, ShoppingCart } from "lucide-react";
+import { Camera, Copy, ExternalLink, PartyPopper, Search, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
@@ -30,6 +30,12 @@ export default function StartNowDialog({ info, onClose }: {
   if (!info) return null;
 
   const mall = mallName(info.category);
+  // 검색 유입 절차를 지켜야 하므로 검색결과 딥링크가 아닌 쇼핑몰 홈으로 보낸다.
+  // (noreferrer로 유입 경로도 남기지 않음 — 키워드는 복사해서 직접 검색)
+  const mallUrl =
+    mall === "쿠팡" ? "https://www.coupang.com"
+    : mall === "스마트스토어" ? "https://shopping.naver.com"
+    : null;
   const copyKeyword = async () => {
     try {
       await navigator.clipboard.writeText(info.keyword);
@@ -89,8 +95,18 @@ export default function StartNowDialog({ info, onClose }: {
           </Step>
         </div>
 
-        <DialogFooter>
-          <Button className="h-11 w-full rounded-xl font-bold" onClick={() => { onClose(); navigate("/my"); }}>
+        <DialogFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+          {mallUrl && (
+            <Button asChild className={`h-11 w-full rounded-xl font-bold text-white ${
+              mall === "쿠팡" ? "bg-orange-500 hover:bg-orange-600" : "bg-green-600 hover:bg-green-700"
+            }`}>
+              <a href={mallUrl} target="_blank" rel="noreferrer">
+                <ExternalLink className="mr-1.5 h-4 w-4" /> {mall} 바로가기
+              </a>
+            </Button>
+          )}
+          <Button variant={mallUrl ? "outline" : "default"} className={`h-11 w-full rounded-xl font-semibold ${mallUrl ? "bg-card" : "font-bold"}`}
+            onClick={() => { onClose(); navigate("/my"); }}>
             내 활동에서 진행하기
           </Button>
         </DialogFooter>
