@@ -30,7 +30,8 @@ import { participationDeadline } from "@shared/const";
 import { CalendarPlus, CheckCircle2, ChevronDown, ChevronRight, FileSpreadsheet, Inbox, MessageCircle, Phone, Trash2, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+// xlsx 커뮤니티판은 셀 스타일(배경색) 미지원 — 동일 API에 스타일이 추가된 포크 사용.
+import * as XLSX from "xlsx-js-style";
 
 /** listAll 응답 중 참여자 목록 렌더에 필요한 필드 (경량 페이로드 + 인증샷 존재 플래그). */
 type ListRow = {
@@ -309,7 +310,7 @@ export default function AdminParticipations() {
       return;
     }
     const wsData: (string | number)[][] = [
-      ["번호", "상품명", "리뷰어 성함", "상품 최종구매 금액", "연락처", "주소", "송장번호"],
+      ["번호", "상품명", "리뷰어 성함", "상품 최종구매 금액", "연락처", "주소", "택배사", "운송장 번호"],
       ...active.map((r, i) => [
         i + 1, // A열: 리뷰어 순번
         r.campaign?.title ?? group.title,
@@ -317,11 +318,21 @@ export default function AdminParticipations() {
         r.campaign?.productPrice ?? 0, // 리뷰 수수료 제외, 상품 최종판매가만
         r.user?.phone ?? "-",
         r.user?.address ?? "-",
-        "", // 송장번호: 공란 (업체가 입력)
+        "", // 택배사: 공란 (업체가 입력)
+        "", // 운송장 번호: 공란 (업체가 입력)
       ]),
     ];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws["!cols"] = [{ wch: 6 }, { wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 15 }, { wch: 42 }, { wch: 14 }];
+    ws["!cols"] = [{ wch: 6 }, { wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 15 }, { wch: 42 }, { wch: 10 }, { wch: 16 }];
+    // 헤더(1행): 연한 노란색 배경 + 굵게 + 가운데 정렬
+    const headerStyle = {
+      fill: { patternType: "solid", fgColor: { rgb: "FFF2CC" } },
+      font: { bold: true },
+      alignment: { horizontal: "center" },
+    };
+    for (const col of ["A", "B", "C", "D", "E", "F", "G", "H"]) {
+      if (ws[`${col}1`]) ws[`${col}1`].s = headerStyle;
+    }
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "참여리뷰어");
     const safeTitle = group.title.replace(/[\\/:*?"<>|]/g, " ").trim() || "캠페인";
