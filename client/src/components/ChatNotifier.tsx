@@ -7,7 +7,7 @@ import { useEffect, useRef } from "react";
  * 새 채팅(읽지 않은 메시지) 수가 늘면 **소리 + 크롬 데스크톱 알림**을 띄운다.
  * - 사이트가 브라우저 탭으로 열려 있는 동안만 동작(백그라운드 탭 포함). 완전히 닫으면 X(=Web Push 필요).
  * - 알림 권한은 로그인 후 첫 클릭(사용자 제스처) 때 한 번 요청.
- * - businessMessage(업체↔리뷰어) unread 기준. (운영팀 문의는 카카오 채널로 이관되어 제외)
+ * - businessMessage(업체↔리뷰어) + directMessage(운영팀↔리뷰어) unread 합계 기준.
  */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -38,7 +38,11 @@ export default function ChatNotifier() {
     enabled: isAuthenticated,
     refetchInterval: 5000,
   });
-  const total = bmUnread || 0;
+  const { data: dmUnread = 0 } = trpc.directMessage.unreadCount.useQuery(undefined, {
+    enabled: isAuthenticated,
+    refetchInterval: 5000,
+  });
+  const total = (bmUnread || 0) + (dmUnread || 0);
   const prevRef = useRef<number | null>(null);
 
   // 로그인 후 첫 사용자 제스처에서 알림 권한 1회 요청 (브라우저 정책상 제스처 필요).

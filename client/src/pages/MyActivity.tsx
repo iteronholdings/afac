@@ -16,6 +16,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import {
   formatKRW,
+  mallName,
   ParticipationStatus,
   STATUS_BADGE,
   STATUS_LABEL,
@@ -216,9 +217,19 @@ export default function MyActivity() {
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <h3 className="font-semibold leading-snug text-foreground">
+                            <span className="mr-1 font-medium text-muted-foreground">상품명 :</span>
                             {c?.title ?? "삭제된 캠페인"}
                           </h3>
                           <div className="mt-1 flex flex-wrap items-center gap-1">
+                            {c?.category && (
+                              <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold text-white ${
+                                mallName(c.category) === "쿠팡" ? "bg-orange-500"
+                                : mallName(c.category) === "스마트스토어" ? "bg-green-600"
+                                : "bg-slate-500"
+                              }`}>
+                                {mallName(c.category)}
+                              </span>
+                            )}
                             {p.reviewType && (
                               <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
                                 {REVIEW_TYPE_LABEL[p.reviewType]} 배정

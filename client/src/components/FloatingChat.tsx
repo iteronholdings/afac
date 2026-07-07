@@ -54,6 +54,8 @@ export default function FloatingChat() {
   }, []);
 
   if (!isAuthenticated || !user) return null;
+  // 업체 계정은 카카오 채널·업체 메시지를 사용 — 운영팀 채팅 FAB은 리뷰어·관리자 전용.
+  if (user.role === "business") return null;
 
   const isAdmin = user.role === "admin";
 

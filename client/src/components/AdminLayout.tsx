@@ -7,6 +7,7 @@ import {
   ListChecks,
   LogOut,
   Megaphone,
+  MessageCircle,
   MessagesSquare,
   Receipt,
   Rocket,
@@ -20,7 +21,7 @@ const NAV = [
   { label: "캠페인 관리", href: "/admin", icon: Megaphone, exact: true },
   { label: "참여 현황", href: "/admin/participations", icon: ListChecks },
   { label: "정산 관리", href: "/admin/settlement", icon: Receipt },
-  // 1:1 문의(운영팀 채팅)는 카카오 채널로 이관 — 과거 기록은 /admin/messages 직접 접속.
+  { label: "1:1 문의 (리뷰어)", href: "/admin/messages", icon: MessageCircle },
   { label: "업체–리뷰어 대화", href: "/admin/business-chats", icon: MessagesSquare },
   { label: "상위노출 문의", href: "/admin/consulting", icon: Rocket },
   { label: "업체 관리", href: "/admin/businesses", icon: Building2 },

@@ -1,4 +1,5 @@
 import ChatNotifier from "@/components/ChatNotifier";
+import FloatingChat from "@/components/FloatingChat";
 import PushPrompt from "@/components/PushPrompt";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -156,6 +157,8 @@ function App() {
           <Toaster position="top-center" richColors />
           <Router />
           <ChatNotifier />
+          {/* 운영팀↔리뷰어 1:1 채팅 FAB (업체는 카카오 채널 사용) */}
+          <FloatingChat />
           <PushPrompt />
         </TooltipProvider>
       </ThemeProvider>

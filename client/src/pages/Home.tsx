@@ -205,6 +205,7 @@ export default function Home() {
                       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                         <div className="flex items-start justify-between gap-2">
                           <h3 className="font-semibold leading-snug text-foreground truncate">
+                            <span className="mr-1 font-medium text-muted-foreground">상품명 :</span>
                             {c?.title ?? "삭제된 캠페인"}
                           </h3>
                           <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE[status]}`}>
@@ -212,7 +213,16 @@ export default function Home() {
                           </span>
                         </div>
                         {c && (
-                          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                            {c.category && (
+                              <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold text-white ${
+                                mallName(c.category) === "쿠팡" ? "bg-orange-500"
+                                : mallName(c.category) === "스마트스토어" ? "bg-green-600"
+                                : "bg-slate-500"
+                              }`}>
+                                {mallName(c.category)}
+                              </span>
+                            )}
                             <span className="inline-flex items-center gap-1">
                               <Search className="h-3 w-3 text-primary" /> {c.keyword}
                             </span>
