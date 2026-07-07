@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatKRW, mallName } from "@/lib/workflow";
+import { PARTICIPATION_DEADLINE_DAYS } from "@shared/const";
 import { Camera, Copy, PartyPopper, Search, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
@@ -82,6 +83,9 @@ export default function StartNowDialog({ info, onClose }: {
           <Step n={3} icon={<Camera className="h-4 w-4" />}>
             검색·구매 인증샷을 <b className="text-foreground">내 활동</b>에서 등록하면 끝!
             {typeLine && <p className="mt-0.5 text-xs text-muted-foreground">{typeLine}</p>}
+            <p className="mt-0.5 text-xs font-semibold text-amber-700">
+              ⏰ 참여일로부터 {PARTICIPATION_DEADLINE_DAYS}일 안에 리뷰 인증샷까지 등록해 주세요.
+            </p>
           </Step>
         </div>
 

@@ -1,4 +1,4 @@
-import { isCompleteAddress } from "@shared/const";
+import { isCompleteAddress, PARTICIPATION_DEADLINE_DAYS, participationDeadline } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import * as db from "../db";
@@ -43,6 +43,16 @@ async function tryAssignReviewDraft(participationId: number, reviewType: string 
     await db.updateParticipation(participationId, { reviewDraft: draft });
   } catch (e) {
     console.error("[review draft] skipped:", e);
+  }
+}
+
+/** 인증샷 제출 기한(참여 후 7일, 연장 반영) 초과 시 제출 차단. */
+function assertNotExpired(p: { appliedAt: Date | string; deadlineAt?: Date | string | null }) {
+  if (Date.now() > participationDeadline(p.appliedAt, p.deadlineAt).getTime()) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: `제출 기한(참여 후 ${PARTICIPATION_DEADLINE_DAYS}일)이 지났습니다. 계속 진행하려면 운영팀 채팅으로 문의해 주세요.`,
+    });
   }
 }
 
@@ -156,6 +166,7 @@ export const participationRouter = router({
           userId: ctx.user.id,
           status: "applied",
           assignedDate,
+          deadlineAt: new Date(Date.now() + PARTICIPATION_DEADLINE_DAYS * 86_400_000),
         });
         scheduleAssignPacket(input.campaignId); // 패킷은 백그라운드 배정(가입 즉시 응답)
         if (created) await tryAssignReviewDraft(created.id, null, input.campaignId); // 원고 자동생성
@@ -185,6 +196,7 @@ export const participationRouter = router({
         status: "applied",
         reviewType: assigned,
         assignedDate,
+        deadlineAt: new Date(Date.now() + PARTICIPATION_DEADLINE_DAYS * 86_400_000),
       });
       if (assigned === "photo") scheduleAssignPacket(input.campaignId); // 패킷은 백그라운드 배정(가입 즉시 응답)
       if (created) await tryAssignReviewDraft(created.id, assigned, input.campaignId); // 원고 자동생성
@@ -202,6 +214,7 @@ export const participationRouter = router({
       if (!["applied", "searched"].includes(p.status)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "현재 단계에서는 검색 인증을 등록할 수 없습니다." });
       }
+      assertNotExpired(p);
       return db.updateParticipation(input.participationId, {
         searchProofUrl: input.proofUrl,
         status: "searched",
@@ -220,6 +233,7 @@ export const participationRouter = router({
       if (!["searched", "purchased"].includes(p.status)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "검색 인증 후에 구매 인증을 등록할 수 있습니다." });
       }
+      assertNotExpired(p);
       return db.updateParticipation(input.participationId, {
         purchaseProofUrl: input.proofUrl,
         status: "purchased",
@@ -238,6 +252,7 @@ export const participationRouter = router({
       if (!["purchased", "reviewed"].includes(p.status)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "구매 인증 후에 리뷰 인증을 등록할 수 있습니다." });
       }
+      assertNotExpired(p);
       return db.updateParticipation(input.participationId, {
         reviewProofUrl: input.proofUrl,
         status: "reviewed",
@@ -299,6 +314,29 @@ export const participationRouter = router({
       if (input.status === "paid") patch.paidAt = new Date();
 
       return db.updateParticipation(input.participationId, patch);
+    }),
+
+  /** Admin: 제출 기한 7일 연장 — 지금 시점과 기존 마감 중 늦은 쪽에 +7일. 리뷰어에게 채팅 안내. */
+  extendDeadline: adminProcedure
+    .input(z.object({ participationId: z.number().int() }))
+    .mutation(async ({ ctx, input }) => {
+      const p = await db.getParticipationById(input.participationId);
+      if (!p) throw new TRPCError({ code: "NOT_FOUND", message: "참여 내역을 찾을 수 없습니다." });
+      const current = participationDeadline(p.appliedAt, p.deadlineAt).getTime();
+      const next = new Date(Math.max(current, Date.now()) + PARTICIPATION_DEADLINE_DAYS * 86_400_000);
+      await db.updateParticipation(input.participationId, { deadlineAt: next });
+      try {
+        const campaign = await db.getCampaignById(p.campaignId);
+        const dstr = `${next.getMonth() + 1}/${next.getDate()}`;
+        await db.createDirectMessage({
+          reviewerId: p.userId,
+          fromUserId: ctx.user.id,
+          content: `[자동 안내] '${campaign?.title ?? "캠페인"}'의 제출 기한이 ${PARTICIPATION_DEADLINE_DAYS}일 연장되었습니다. (새 마감: ${dstr}) 기한 내에 리뷰 인증샷까지 등록해 주세요.`,
+        });
+      } catch (e) {
+        console.error("[extendDeadline] 안내 메시지 실패:", e);
+      }
+      return { deadlineAt: next };
     }),
 
   /**

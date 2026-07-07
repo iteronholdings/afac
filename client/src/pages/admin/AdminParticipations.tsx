@@ -26,7 +26,8 @@ import {
   STATUS_LABEL,
   totalPayout,
 } from "@/lib/workflow";
-import { CheckCircle2, ChevronDown, ChevronRight, FileSpreadsheet, Inbox, MessageCircle, Phone, Trash2, Wallet } from "lucide-react";
+import { participationDeadline } from "@shared/const";
+import { CalendarPlus, CheckCircle2, ChevronDown, ChevronRight, FileSpreadsheet, Inbox, MessageCircle, Phone, Trash2, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
@@ -36,6 +37,8 @@ type ListRow = {
   id: number;
   campaignId: number;
   status: string;
+  appliedAt: Date | string;
+  deadlineAt?: Date | string | null;
   hasSearchProof: boolean;
   hasPurchaseProof: boolean;
   hasReviewProof: boolean;
@@ -68,6 +71,15 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
     onError: e => toast.error(e.message),
   });
 
+  // 기한 초과 참여 연장 (7일)
+  const extendDeadline = trpc.participation.extendDeadline.useMutation({
+    onSuccess: () => {
+      utils.participation.listAll.invalidate();
+      toast.success("제출 기한을 7일 연장하고 리뷰어에게 안내를 보냈습니다.");
+    },
+    onError: e => toast.error(e.message),
+  });
+
   return (
     <div className="divide-y divide-border/60 border-t border-border/60">
       {rows.map(r => {
@@ -75,6 +87,10 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
         const payout = r.campaign ? totalPayout(r.campaign.productPrice, r.campaign.commission) : 0;
         const pf = proofMap.get(r.id);
         const waitingProofs = proofsLoading && (r.hasSearchProof || r.hasPurchaseProof || r.hasReviewProof);
+        // 제출 기한 (참여 후 7일) — 진행 중 단계에서만 의미 있음
+        const deadlineActive = ["applied", "searched", "purchased"].includes(status);
+        const deadline = participationDeadline(r.appliedAt, r.deadlineAt);
+        const expired = deadlineActive && deadline.getTime() < Date.now();
         return (
           <div key={r.id} className="grid gap-4 p-4 md:grid-cols-[1fr_auto]">
             <div className="space-y-3">
@@ -92,6 +108,13 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
                   <span className="inline-flex items-center gap-1">
                     <Wallet className="h-3.5 w-3.5" /> 지급 예정 {formatKRW(payout)}
                   </span>
+                  {deadlineActive && (
+                    expired ? (
+                      <span className="font-bold text-red-600">⏰ 제출 기한 초과</span>
+                    ) : (
+                      <span>기한 {deadline.getMonth() + 1}/{deadline.getDate()}</span>
+                    )
+                  )}
                 </div>
               </div>
 
@@ -137,6 +160,12 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
               {status === "rejected" && (
                 <Button size="sm" variant="outline" className="bg-card" disabled={actPending} onClick={() => act(r.id, "applied")}>
                   반려 취소
+                </Button>
+              )}
+              {expired && (
+                <Button size="sm" variant="outline" className="bg-card" disabled={extendDeadline.isPending}
+                  onClick={() => extendDeadline.mutate({ participationId: r.id })}>
+                  <CalendarPlus className="mr-1.5 h-4 w-4" /> 기한 7일 연장
                 </Button>
               )}
               {status !== "paid" && (

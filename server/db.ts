@@ -88,6 +88,7 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE users ADD COLUMN taxEmail VARCHAR(120)`,
     sql`ALTER TABLE users ADD COLUMN address VARCHAR(255)`,
     sql`ALTER TABLE users ADD COLUMN withdrawnAt TIMESTAMP NULL`,
+    sql`ALTER TABLE participations ADD COLUMN deadlineAt TIMESTAMP NULL`,
   ];
   for (const stmt of alterStatements) {
     try {
@@ -738,6 +739,7 @@ export async function listParticipationsLite(opts?: { campaignId?: number }) {
     assignedName: participations.assignedName,
     adminMemo: participations.adminMemo,
     appliedAt: participations.appliedAt,
+    deadlineAt: participations.deadlineAt,
     approvedAt: participations.approvedAt,
     paidAt: participations.paidAt,
     hasSearchProof: sql<number>`(${participations.searchProofUrl} IS NOT NULL)`,

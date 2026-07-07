@@ -9,3 +9,12 @@ export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
  * 구형식(자유 입력) 주소는 미완성으로 취급해 재등록을 요구한다.
  */
 export const isCompleteAddress = (addr?: string | null): boolean => /^\(\d{5}\)\s/.test(addr ?? "");
+
+/** 캠페인 참여 후 리뷰 인증샷 등록까지 허용되는 기한(일). */
+export const PARTICIPATION_DEADLINE_DAYS = 7;
+
+/** 참여 제출 마감 시각 — 연장(deadlineAt)이 있으면 그 값, 없으면 참여 시점 + 7일. */
+export function participationDeadline(appliedAt: string | Date, deadlineAt?: string | Date | null): Date {
+  if (deadlineAt) return new Date(deadlineAt);
+  return new Date(new Date(appliedAt).getTime() + PARTICIPATION_DEADLINE_DAYS * 86_400_000);
+}

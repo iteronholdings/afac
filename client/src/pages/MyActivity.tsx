@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
+import { participationDeadline } from "@shared/const";
 import {
   formatKRW,
   mallName,
@@ -246,6 +247,24 @@ export default function MyActivity() {
                                 </span>
                               )
                             )}
+                            {/* 제출 기한 D-day (참여 후 7일) — 진행 중 단계에서만 */}
+                            {["applied", "searched", "purchased"].includes(status) && (() => {
+                              const dl = participationDeadline(p.appliedAt, p.deadlineAt);
+                              const remaining = dl.getTime() - Date.now();
+                              const daysLeft = Math.ceil(remaining / 86_400_000);
+                              const dstr = `${dl.getMonth() + 1}/${dl.getDate()}`;
+                              return remaining < 0 ? (
+                                <span className="inline-block rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
+                                  ⏰ 제출 기한 초과 — 운영팀 문의
+                                </span>
+                              ) : (
+                                <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
+                                  daysLeft <= 2 ? "bg-red-100 text-red-700" : "bg-secondary text-secondary-foreground"
+                                }`}>
+                                  ⏰ 제출 마감 D-{daysLeft} ({dstr})
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
                         <span

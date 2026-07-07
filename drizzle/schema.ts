@@ -187,6 +187,9 @@ export const participations = mysqlTable("participations", {
   /** 배분 진행 캠페인에서 이 리뷰어에게 자동 배정된 진행 날짜 ('YYYY-MM-DD'). */
   assignedDate: varchar("assignedDate", { length: 20 }),
 
+  /** 리뷰 인증샷 제출 마감 시각 (참여 시 +7일, 관리자 연장 가능). null이면 appliedAt+7일로 간주. */
+  deadlineAt: timestamp("deadlineAt"),
+
   appliedAt: timestamp("appliedAt").defaultNow().notNull(),
   searchedAt: timestamp("searchedAt"),
   purchasedAt: timestamp("purchasedAt"),
