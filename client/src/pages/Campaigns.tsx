@@ -1,6 +1,7 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import CampaignCard from "@/components/CampaignCard";
 import SiteHeader from "@/components/SiteHeader";
+import StartNowDialog, { type StartNowInfo } from "@/components/StartNowDialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,7 +16,7 @@ import { formatKRW, mallName, totalPayout } from "@/lib/workflow";
 import { Input } from "@/components/ui/input";
 import RecruitScheduleInfo from "@/components/RecruitScheduleInfo";
 import { CheckCircle2, ImageIcon, Search, Sparkles } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { Loader2 } from "lucide-react";
@@ -55,23 +56,33 @@ export default function Campaigns() {
       .map(p => p.campaignId)
   );
 
+  // 참여 성공 시 "바로 시작" 안내에 쓸 캠페인 정보 (신청 시점에 캡처)
+  const pendingJoinRef = useRef<StartNowInfo | null>(null);
+  const [startNow, setStartNow] = useState<StartNowInfo | null>(null);
+
   const joinMutation = trpc.participation.join.useMutation({
-    onSuccess: () => {
+    onSuccess: created => {
       utils.participation.mine.invalidate();
       utils.campaign.listOpen.invalidate();
-      toast.success("참여 신청이 완료되었습니다. '내 활동'에서 진행해 주세요.");
       setSelectedId(null);
-      navigate("/my");
+      // 참여 즉시 검색→구매 절차로 안내 (키워드 복사 → 상품가 확인 → 인증샷)
+      if (pendingJoinRef.current) {
+        setStartNow({ ...pendingJoinRef.current, reviewType: created?.reviewType ?? null });
+      } else {
+        toast.success("참여 신청이 완료되었습니다. '내 활동'에서 진행해 주세요.");
+        navigate("/my");
+      }
     },
     onError: err => toast.error(err.message),
   });
 
-  const handleJoin = (campaignId: number) => {
+  const handleJoin = (c: { id: number; title: string; keyword: string; category?: string | null; productPrice: number }) => {
     if (!isAuthenticated) {
       navigate("/afreviewer/login");
       return;
     }
-    joinMutation.mutate({ campaignId });
+    pendingJoinRef.current = { title: c.title, keyword: c.keyword, category: c.category, productPrice: c.productPrice };
+    joinMutation.mutate({ campaignId: c.id });
   };
 
   // 인증 확인 중이거나 비로그인이면 캐페인 내용을 노출하지 않는다.
@@ -239,7 +250,7 @@ export default function Campaigns() {
                   <Button
                     className="w-full rounded-xl font-semibold"
                     disabled={selected.remaining <= 0 || joinMutation.isPending}
-                    onClick={() => handleJoin(selected.id)}
+                    onClick={() => handleJoin(selected)}
                   >
                     {joinMutation.isPending
                       ? "신청 중..."
@@ -253,6 +264,9 @@ export default function Campaigns() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 참여 완료 → 바로 시작 안내 */}
+      <StartNowDialog info={startNow} onClose={() => setStartNow(null)} />
     </div>
   );
 }

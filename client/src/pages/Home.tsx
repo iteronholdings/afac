@@ -2,6 +2,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import CampaignCard from "@/components/CampaignCard";
 import RecruitScheduleInfo from "@/components/RecruitScheduleInfo";
 import SiteHeader from "@/components/SiteHeader";
+import StartNowDialog, { type StartNowInfo } from "@/components/StartNowDialog";
 import WorkflowStepper from "@/components/WorkflowStepper";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,7 +32,7 @@ import {
   Sparkles,
   Wallet,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 
@@ -55,15 +56,29 @@ export default function Home() {
     (myParts ?? []).filter(p => p.status !== "rejected").map(p => p.campaignId)
   );
 
+  // 참여 성공 시 "바로 시작" 안내에 쓸 캠페인 정보 (신청 시점에 캡처)
+  const pendingJoinRef = useRef<StartNowInfo | null>(null);
+  const [startNow, setStartNow] = useState<StartNowInfo | null>(null);
+
   const joinMutation = trpc.participation.join.useMutation({
-    onSuccess: () => {
+    onSuccess: created => {
       utils.participation.mine.invalidate();
       utils.campaign.listOpen.invalidate();
-      toast.success("참여 신청 완료! 아래 '내 활동'에서 진행해 주세요.");
       setSelectedId(null);
+      // 참여 즉시 검색→구매 절차로 안내 (키워드 복사 → 상품가 확인 → 인증샷)
+      if (pendingJoinRef.current) {
+        setStartNow({ ...pendingJoinRef.current, reviewType: created?.reviewType ?? null });
+      } else {
+        toast.success("참여 신청 완료! 아래 '내 활동'에서 진행해 주세요.");
+      }
     },
     onError: err => toast.error(err.message),
   });
+
+  const handleJoin = (c: { id: number; title: string; keyword: string; category?: string | null; productPrice: number }) => {
+    pendingJoinRef.current = { title: c.title, keyword: c.keyword, category: c.category, productPrice: c.productPrice };
+    joinMutation.mutate({ campaignId: c.id });
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-secondary/40 to-background">
@@ -302,7 +317,7 @@ export default function Home() {
                   <Button
                     className="w-full rounded-xl font-semibold"
                     disabled={selected.remaining <= 0 || joinMutation.isPending}
-                    onClick={() => joinMutation.mutate({ campaignId: selected.id })}
+                    onClick={() => handleJoin(selected)}
                   >
                     {joinMutation.isPending ? "신청 중..." : selected.remaining <= 0 ? "모집 마감" : "이 캠페인 참여 신청하기"}
                   </Button>
@@ -312,6 +327,9 @@ export default function Home() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 참여 완료 → 바로 시작 안내 */}
+      <StartNowDialog info={startNow} onClose={() => setStartNow(null)} />
     </div>
   );
 }
