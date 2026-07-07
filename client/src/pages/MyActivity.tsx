@@ -204,7 +204,7 @@ export default function MyActivity() {
                   className="overflow-hidden rounded-3xl border border-border/70 bg-card shadow-sm"
                 >
                   <div className="flex flex-col gap-4 p-5 sm:flex-row">
-                    <div className="h-28 w-full shrink-0 overflow-hidden rounded-2xl bg-muted sm:w-36">
+                    <div className="aspect-square w-full shrink-0 overflow-hidden rounded-2xl bg-muted sm:w-36">
                       {c?.thumbnailUrl ? (
                         <img src={c.thumbnailUrl} alt={c.title} className="h-full w-full object-cover" />
                       ) : (
