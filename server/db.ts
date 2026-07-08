@@ -15,9 +15,11 @@ import {
   InsertDepositRequest,
   InsertDirectMessage,
   InsertMessage,
+  InsertKakaoAnnouncement,
   InsertParticipation,
   InsertPushSubscription,
   InsertUser,
+  kakaoAnnouncements,
   messages,
   participations,
   phoneVerifications,
@@ -115,6 +117,22 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     `);
   } catch (e) {
     console.warn("[Migration] phone_verifications table:", e);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS kakao_announcements (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        campaignId INT NOT NULL,
+        message TEXT NOT NULL,
+        status ENUM('pending','sent','failed') NOT NULL DEFAULT 'pending',
+        sentAt TIMESTAMP NULL,
+        error VARCHAR(500),
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (e) {
+    console.warn("[Migration] kakao_announcements table:", e);
   }
 
   try {
@@ -914,6 +932,42 @@ export async function setConsultingRequestStatus(id: number, status: "new" | "co
   await db.update(consultingRequests).set({ status }).where(eq(consultingRequests.id, id));
   const rows = await db.select().from(consultingRequests).where(eq(consultingRequests.id, id)).limit(1);
   return rows[0];
+}
+
+// === Kakao 단톡방 공지 큐 (캠페인 승인 알림) ===
+
+/** 공지 큐에 추가. 같은 캠페인의 미발송(pending) 공지가 이미 있으면 중복 생성하지 않음. */
+export async function enqueueKakaoAnnouncement(campaignId: number, message: string) {
+  const db = await getDb();
+  if (!db) return;
+  const dup = await db
+    .select({ id: kakaoAnnouncements.id })
+    .from(kakaoAnnouncements)
+    .where(and(eq(kakaoAnnouncements.campaignId, campaignId), eq(kakaoAnnouncements.status, "pending")))
+    .limit(1);
+  if (dup.length > 0) return;
+  await db.insert(kakaoAnnouncements).values({ campaignId, message });
+}
+
+/** 발송 대기(pending) 공지 목록 — 로컬 에이전트가 폴링. 오래된 순. */
+export async function listPendingKakaoAnnouncements() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(kakaoAnnouncements)
+    .where(eq(kakaoAnnouncements.status, "pending"))
+    .orderBy(kakaoAnnouncements.createdAt);
+}
+
+/** 에이전트 ack — 게시 성공/실패 표시. */
+export async function markKakaoAnnouncement(id: number, ok: boolean, error?: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(kakaoAnnouncements)
+    .set({ status: ok ? "sent" : "failed", sentAt: ok ? new Date() : null, error: error?.slice(0, 500) ?? null })
+    .where(eq(kakaoAnnouncements.id, id));
 }
 
 // === Business ↔ Reviewer messages (업체-리뷰어 채팅) ===

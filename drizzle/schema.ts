@@ -396,3 +396,26 @@ export const phoneVerifications = mysqlTable("phone_verifications", {
 
 export type PhoneVerification = typeof phoneVerifications.$inferSelect;
 export type InsertPhoneVerification = typeof phoneVerifications.$inferInsert;
+
+/**
+ * 카카오톡 단톡방 공지 발송 큐.
+ * 캠페인 승인(pending→open) 시 pending으로 쌓이고, 회계 컴퓨터의 로컬 에이전트가
+ * 폴링해 카톡 PC로 단톡방에 게시한 뒤 sent로 표시한다. (공식 API 부재 → PC 자동조종)
+ */
+export const kakaoAnnouncements = mysqlTable("kakao_announcements", {
+  id: int("id").autoincrement().primaryKey(),
+  /** 알림 대상 캠페인 id (중복 발송 방지용). */
+  campaignId: int("campaignId").notNull(),
+  /** 단톡방에 게시할 완성된 메시지 텍스트. */
+  message: text("message").notNull(),
+  /** pending: 발송 대기, sent: 게시 완료, failed: 에이전트 발송 실패. */
+  status: mysqlEnum("status", ["pending", "sent", "failed"]).default("pending").notNull(),
+  /** 발송(게시) 완료 시각. */
+  sentAt: timestamp("sentAt"),
+  /** 실패 사유 (에이전트가 ack 시 전달). */
+  error: varchar("error", { length: 500 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type KakaoAnnouncement = typeof kakaoAnnouncements.$inferSelect;
+export type InsertKakaoAnnouncement = typeof kakaoAnnouncements.$inferInsert;

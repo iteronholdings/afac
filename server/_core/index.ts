@@ -11,6 +11,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { verifyWebhook } from "../portone";
 import { creditVbankIfPaid } from "../depositCredit";
+import * as db from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -66,6 +67,37 @@ async function startServer() {
       res.status(200).send("ok");
     }
   });
+  // 카톡 단톡방 공지 — 회계 컴퓨터의 로컬 에이전트가 폴링·게시하는 큐 API.
+  // KAKAO_AGENT_TOKEN 공유 시크릿으로 보호. 미설정 시 503(기능 비활성).
+  const kakaoTokenOk = (t: unknown) => {
+    const secret = process.env.KAKAO_AGENT_TOKEN;
+    return !!secret && typeof t === "string" && t === secret;
+  };
+  app.get("/api/kakao/pending", async (req, res) => {
+    if (!process.env.KAKAO_AGENT_TOKEN) return res.status(503).json({ error: "disabled" });
+    if (!kakaoTokenOk(req.query.token)) return res.status(401).json({ error: "unauthorized" });
+    try {
+      const rows = await db.listPendingKakaoAnnouncements();
+      res.json({ announcements: rows.map(r => ({ id: r.id, message: r.message, campaignId: r.campaignId })) });
+    } catch (e) {
+      console.error("[kakao pending] error:", e);
+      res.status(500).json({ error: "server_error" });
+    }
+  });
+  app.post("/api/kakao/ack", async (req, res) => {
+    if (!process.env.KAKAO_AGENT_TOKEN) return res.status(503).json({ error: "disabled" });
+    if (!kakaoTokenOk(req.body?.token)) return res.status(401).json({ error: "unauthorized" });
+    const id = Number(req.body?.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: "bad_id" });
+    try {
+      await db.markKakaoAnnouncement(id, req.body?.ok !== false, req.body?.error);
+      res.json({ ok: true });
+    } catch (e) {
+      console.error("[kakao ack] error:", e);
+      res.status(500).json({ error: "server_error" });
+    }
+  });
+
   // tRPC API
   app.use(
     "/api/trpc",

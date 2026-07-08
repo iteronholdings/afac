@@ -13,6 +13,27 @@ import {
 import { generateReviewDraft } from "../reviewDraft";
 import { distributeTodayStatus } from "../schedule";
 
+/** 카톡 단톡방 공지 문구 — 캠페인 승인 시 리뷰어 단톡방에 게시할 메시지. */
+function buildCampaignAnnouncement(c: {
+  title: string; keyword: string; category?: string | null;
+  productPrice: number; commission: number; slots: number;
+}): string {
+  const mall = c.category?.includes("쿠팡") ? "쿠팡"
+    : (c.category?.includes("스마트스토어") || c.category?.includes("네이버")) ? "스마트스토어"
+    : "쇼핑몰";
+  const won = (n: number) => `${(n || 0).toLocaleString("ko-KR")}원`;
+  return [
+    "🎉 새 체험단 캠페인이 열렸어요!",
+    "",
+    `📦 ${c.title}`,
+    `🔍 ${mall}에서 "${c.keyword}" 검색`,
+    `💰 상품가 ${won(c.productPrice)} + 작업수당 ${won(c.commission)}`,
+    `👥 모집 ${c.slots}명 (선착순)`,
+    "",
+    "지금 바로 신청하세요 👉 https://www.afac.kr",
+  ].join("\n");
+}
+
 /** photoGuideZip / assignedPacket 값이 R2 키 참조(`r2:<key>`)면 키를, 아니면 null 반환. */
 function r2KeyOf(value?: string | null): string | null {
   return value && value.startsWith("r2:") ? value.slice(3) : null;
@@ -364,7 +385,13 @@ export const campaignRouter = router({
       if (input.status === "closed" || input.status === "rejected") {
         await cleanupCampaignStorage(existing.id, existing.photoGuideZip);
       }
-      return db.updateCampaign(input.id, { status: input.status });
+      const updated = await db.updateCampaign(input.id, { status: input.status });
+      // 첫 승인(pending → open)일 때만 카톡 단톡방 공지 큐에 적재. (모집 재개 반복 발송 방지)
+      if (input.status === "open" && existing.status === "pending") {
+        await db.enqueueKakaoAnnouncement(existing.id, buildCampaignAnnouncement(existing)).catch(e =>
+          console.error("[kakao announce] enqueue 실패:", e));
+      }
+      return updated;
     }),
 
   // Business: fetch a product's thumbnail + price from its URL via OG/meta tags.
