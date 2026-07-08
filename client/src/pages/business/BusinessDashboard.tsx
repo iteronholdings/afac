@@ -7,12 +7,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { downloadDeliveryExcel } from "@/lib/deliveryExcel";
 import { trpc } from "@/lib/trpc";
 import {
   Building2,
   CalendarDays,
   ChevronDown,
   ChevronRight,
+  FileSpreadsheet,
   FolderArchive,
   ImageIcon,
   Loader2,
@@ -172,6 +174,26 @@ export default function BusinessDashboard() {
                     <div className="border-t border-border/60 bg-muted/20 px-5 py-4">
                       <div className="mb-3 flex items-center justify-between gap-2">
                         <h4 className="text-sm font-semibold text-foreground">리뷰어 참여 현황</h4>
+                        <div className="flex items-center gap-2">
+                        {/* 배송용 엑셀 (번호·상품명·성함·금액·연락처·주소·택배사·운송장) */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 rounded-full bg-card"
+                          disabled={loadingParts}
+                          onClick={() => {
+                            const active = (participants ?? []).filter(p => p.status !== "rejected");
+                            downloadDeliveryExcel(c.title, active.map(p => ({
+                              name: p.reviewer?.fullName ?? "-",
+                              productTitle: c.title,
+                              productPrice: c.productPrice,
+                              phone: p.reviewer?.phone ?? "-",
+                              address: p.reviewer?.address ?? "-",
+                            })));
+                          }}
+                        >
+                          <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> 엑셀 다운로드
+                        </Button>
                         {c.hasPhotoGuideZip && (
                           <Button
                             size="sm"
@@ -184,6 +206,7 @@ export default function BusinessDashboard() {
                             가이드 ZIP 리뷰어 할당
                           </Button>
                         )}
+                        </div>
                       </div>
 
                       {/* 배분 캠페인: 날짜별 모집 인원 현황 */}

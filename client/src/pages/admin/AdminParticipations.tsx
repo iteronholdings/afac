@@ -30,8 +30,7 @@ import { participationDeadline } from "@shared/const";
 import { CalendarPlus, CheckCircle2, ChevronDown, ChevronRight, FileSpreadsheet, Inbox, MessageCircle, Phone, Trash2, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-// xlsx 커뮤니티판은 셀 스타일(배경색) 미지원 — 동일 API에 스타일이 추가된 포크 사용.
-import * as XLSX from "xlsx-js-style";
+import { downloadDeliveryExcel } from "@/lib/deliveryExcel";
 
 /** listAll 응답 중 참여자 목록 렌더에 필요한 필드 (경량 페이로드 + 인증샷 존재 플래그). */
 type ListRow = {
@@ -298,46 +297,16 @@ export default function AdminParticipations() {
     return Array.from(map.entries()).map(([id, v]) => ({ campaignId: id, ...v }));
   }, [filtered]);
 
-  /**
-   * 캠페인별 참여 리뷰어 엑셀 다운로드 (업체 배송용).
-   * 1행 헤더부터 시작하고 A열에 리뷰어 순번(1, 2, 3…)을 매긴다.
-   * 송장번호(G열)는 업체가 채워 보내는 용도라 공란으로 내보낸다.
-   */
+  /** 캠페인별 참여 리뷰어 엑셀 다운로드 (업체 배송용 — 공용 빌더 사용). */
   const downloadExcel = (group: { campaignId: number; title: string; rows: typeof filtered }) => {
     const active = group.rows.filter(r => r.status !== "rejected");
-    if (active.length === 0) {
-      toast.error("내보낼 참여자가 없습니다.");
-      return;
-    }
-    const wsData: (string | number)[][] = [
-      ["번호", "상품명", "리뷰어 성함", "상품 최종구매 금액", "연락처", "주소", "택배사", "운송장 번호"],
-      ...active.map((r, i) => [
-        i + 1, // A열: 리뷰어 순번
-        r.campaign?.title ?? group.title,
-        r.user?.fullName ?? "-",
-        r.campaign?.productPrice ?? 0, // 리뷰 수수료 제외, 상품 최종판매가만
-        r.user?.phone ?? "-",
-        r.user?.address ?? "-",
-        "", // 택배사: 공란 (업체가 입력)
-        "", // 운송장 번호: 공란 (업체가 입력)
-      ]),
-    ];
-    const ws = XLSX.utils.aoa_to_sheet(wsData);
-    ws["!cols"] = [{ wch: 6 }, { wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 15 }, { wch: 42 }, { wch: 10 }, { wch: 16 }];
-    // 헤더(1행): 연한 노란색 배경 + 굵게 + 가운데 정렬
-    const headerStyle = {
-      fill: { patternType: "solid", fgColor: { rgb: "FFF2CC" } },
-      font: { bold: true },
-      alignment: { horizontal: "center" },
-    };
-    for (const col of ["A", "B", "C", "D", "E", "F", "G", "H"]) {
-      if (ws[`${col}1`]) ws[`${col}1`].s = headerStyle;
-    }
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "참여리뷰어");
-    const safeTitle = group.title.replace(/[\\/:*?"<>|]/g, " ").trim() || "캠페인";
-    XLSX.writeFile(wb, `${safeTitle}_참여리뷰어_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    toast.success("엑셀 파일이 다운로드됩니다.");
+    downloadDeliveryExcel(group.title, active.map(r => ({
+      name: r.user?.fullName ?? "-",
+      productTitle: r.campaign?.title ?? group.title,
+      productPrice: r.campaign?.productPrice ?? 0,
+      phone: r.user?.phone ?? "-",
+      address: r.user?.address ?? "-",
+    })));
   };
 
   const toggleCampaign = (id: number) => {

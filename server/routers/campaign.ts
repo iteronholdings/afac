@@ -567,7 +567,7 @@ export const campaignRouter = router({
           return {
             ...p,
             reviewer: reviewer
-              ? { id: reviewer.id, fullName: reviewer.fullName, phone: reviewer.phone }
+              ? { id: reviewer.id, fullName: reviewer.fullName, phone: reviewer.phone, address: reviewer.address ?? null }
               : null,
           };
         })
