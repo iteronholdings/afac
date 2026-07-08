@@ -13,10 +13,26 @@ import {
 } from "@/components/ui/alert-dialog";
 import { trpc } from "@/lib/trpc";
 import { formatKRW, totalPayout } from "@/lib/workflow";
-import { ImageOff, Megaphone, Pencil, Plus, Trash2, Users, Wand2 } from "lucide-react";
+import { CalendarDays, ClipboardList, ImageOff, Megaphone, Pencil, Plus, Trash2, Users, Wand2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+
+/** 'YYYY-MM-DD' → 'M/D'. */
+const mmdd = (iso: string) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
+
+/** 날짜별 배분 스케줄 JSON → [{date, count}] (인원 0 제외, 날짜순). */
+function parseSchedule(scheduleJson?: string | null): { date: string; count: number }[] {
+  try {
+    const s = JSON.parse(scheduleJson || "{}") as Record<string, number>;
+    return Object.entries(s)
+      .filter(([, n]) => Number(n) > 0)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, n]) => ({ date, count: Number(n) }));
+  } catch {
+    return [];
+  }
+}
 
 const STATUS_META: Record<string, { label: string; badge: string }> = {
   pending:     { label: "승인대기", badge: "bg-yellow-400 text-yellow-900" },
@@ -219,6 +235,44 @@ export default function AdminCampaigns() {
                   <div className="col-span-2 rounded-lg bg-primary/10 px-2.5 py-2">
                     <p className="text-muted-foreground">💳 예치금 사용액 <span className="text-[10px]">(업체 결제)</span></p>
                     <p className="text-sm font-extrabold text-primary">{c.paidAmount > 0 ? formatKRW(c.paidAmount) : "—"}</p>
+                  </div>
+                </div>
+
+                {/* 승인 전 판단 정보: 리뷰 구성 + 진행 날짜 */}
+                <div className="space-y-1.5 rounded-xl border border-border/60 bg-secondary/30 p-3 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <ClipboardList className="h-3.5 w-3.5 shrink-0 text-primary" />
+                    <span className="text-muted-foreground">리뷰 구성</span>
+                    <b className="text-foreground">
+                      사진 {c.photoCount ?? 0} · 글자 {c.textCount ?? 0} · 별점 {c.starCount ?? 0}
+                    </b>
+                  </div>
+                  <div className="flex items-start gap-1.5">
+                    <CalendarDays className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                    <span className="shrink-0 text-muted-foreground">진행</span>
+                    {(() => {
+                      const sched = parseSchedule(c.schedule);
+                      if (sched.length > 0) {
+                        return (
+                          <span className="flex flex-wrap gap-x-2 gap-y-0.5">
+                            <b className="text-foreground">날짜별 배분</b>
+                            {sched.map(s => (
+                              <span key={s.date} className="rounded bg-card px-1.5 py-px font-semibold text-foreground ring-1 ring-border/60">
+                                {mmdd(s.date)} {s.count}명
+                              </span>
+                            ))}
+                          </span>
+                        );
+                      }
+                      if (c.startDate) {
+                        return (
+                          <b className="text-foreground">
+                            단일 {mmdd(c.startDate)}{c.endDate ? ` ~ ${mmdd(c.endDate)}` : ""}
+                          </b>
+                        );
+                      }
+                      return <span className="text-muted-foreground">기간 미지정</span>;
+                    })()}
                   </div>
                 </div>
 
