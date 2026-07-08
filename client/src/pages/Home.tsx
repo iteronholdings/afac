@@ -1,5 +1,6 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import CampaignCard from "@/components/CampaignCard";
+import FirstJoinConsentDialog from "@/components/FirstJoinConsentDialog";
 import RecruitScheduleInfo from "@/components/RecruitScheduleInfo";
 import SiteHeader from "@/components/SiteHeader";
 import StartNowDialog, { type StartNowInfo } from "@/components/StartNowDialog";
@@ -75,9 +76,22 @@ export default function Home() {
     onError: err => toast.error(err.message),
   });
 
-  const handleJoin = (c: { id: number; title: string; keyword: string; category?: string | null; productPrice: number }) => {
+  type JoinTarget = { id: number; title: string; keyword: string; category?: string | null; productPrice: number };
+  // 첫 참여자(참여 이력 0건) 필수 동의 — 신청 즉시 검색·구매 진행 약속에 체크해야 신청됨.
+  const [consentFor, setConsentFor] = useState<JoinTarget | null>(null);
+  const isFirstJoin = (myParts ?? []).length === 0;
+
+  const doJoin = (c: JoinTarget) => {
     pendingJoinRef.current = { title: c.title, keyword: c.keyword, category: c.category, productPrice: c.productPrice };
     joinMutation.mutate({ campaignId: c.id });
+  };
+
+  const handleJoin = (c: JoinTarget) => {
+    if (isFirstJoin) {
+      setConsentFor(c);
+      return;
+    }
+    doJoin(c);
   };
 
   return (
@@ -340,6 +354,17 @@ export default function Home() {
 
       {/* 참여 완료 → 바로 시작 안내 */}
       <StartNowDialog info={startNow} onClose={() => setStartNow(null)} />
+
+      {/* 첫 참여자 필수 동의 (신청 즉시 검색·구매 진행) */}
+      <FirstJoinConsentDialog
+        open={consentFor !== null}
+        onCancel={() => setConsentFor(null)}
+        onConfirm={() => {
+          const c = consentFor;
+          setConsentFor(null);
+          if (c) doJoin(c);
+        }}
+      />
     </div>
   );
 }
