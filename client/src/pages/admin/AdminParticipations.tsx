@@ -33,10 +33,18 @@ import { toast } from "sonner";
 import { downloadDeliveryExcel } from "@/lib/deliveryExcel";
 
 /** listAll 응답 중 참여자 목록 렌더에 필요한 필드 (경량 페이로드 + 인증샷 존재 플래그). */
+/** 배정된 리뷰 유형 배지 라벨. */
+const REVIEW_TYPE_LABEL: Record<string, string> = {
+  photo: "📷 사진",
+  text: "✍️ 글자",
+  star: "⭐ 별점",
+};
+
 type ListRow = {
   id: number;
   campaignId: number;
   status: string;
+  reviewType?: string | null;
   appliedAt: Date | string;
   deadlineAt?: Date | string | null;
   hasSearchProof: boolean;
@@ -98,6 +106,11 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
                 <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_BADGE[status]}`}>
                   {STATUS_LABEL[status]}
                 </span>
+                {r.reviewType && (
+                  <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-bold text-primary">
+                    {REVIEW_TYPE_LABEL[r.reviewType] ?? r.reviewType} 배정
+                  </span>
+                )}
                 <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm text-muted-foreground">
                   <span>
                     <b className="text-foreground">{r.user?.fullName ?? "-"}</b> ({r.user?.loginId ?? "-"})
