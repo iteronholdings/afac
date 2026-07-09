@@ -91,6 +91,8 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE users ADD COLUMN address VARCHAR(255)`,
     sql`ALTER TABLE users ADD COLUMN withdrawnAt TIMESTAMP NULL`,
     sql`ALTER TABLE participations ADD COLUMN deadlineAt TIMESTAMP NULL`,
+    sql`ALTER TABLE campaigns ADD COLUMN invoiceExcel LONGTEXT`,
+    sql`ALTER TABLE campaigns ADD COLUMN invoiceExcelName VARCHAR(255)`,
   ];
   for (const stmt of alterStatements) {
     try {
@@ -796,7 +798,22 @@ export async function listCampaignsLite() {
     productPrice: campaigns.productPrice,
     commission: campaigns.commission,
     status: campaigns.status,
+    invoiceExcelName: campaigns.invoiceExcelName,
   }).from(campaigns);
+}
+
+/** 캠페인에 업로드된 배송 엑셀 (base64 data URL + 파일명). 없으면 null. */
+export async function getInvoiceExcel(campaignId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db
+    .select({ invoiceExcel: campaigns.invoiceExcel, invoiceExcelName: campaigns.invoiceExcelName })
+    .from(campaigns)
+    .where(eq(campaigns.id, campaignId))
+    .limit(1);
+  const row = rows[0];
+  if (!row?.invoiceExcel) return null;
+  return { dataUrl: row.invoiceExcel, name: row.invoiceExcelName ?? "invoice.xlsx" };
 }
 
 /** All participations (admin view), optionally filtered by campaign and/or status. */

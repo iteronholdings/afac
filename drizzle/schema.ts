@@ -105,6 +105,10 @@ export const campaigns = mysqlTable("campaigns", {
   photoGuideZip: longtext("photoGuideZip"),
   /** 사진 리뷰 ZIP 원본 파일명. */
   photoGuideZipName: varchar("photoGuideZipName", { length: 255 }),
+  /** 관리자가 송장번호를 채워 올린 배송 엑셀 (base64 data URL). */
+  invoiceExcel: longtext("invoiceExcel"),
+  /** 업로드된 배송 엑셀 파일명. */
+  invoiceExcelName: varchar("invoiceExcelName", { length: 255 }),
   /**
    * 운영 상태:
    * pending(승인대기) · open(승인완료=모집중) · in_progress(작업진행) ·

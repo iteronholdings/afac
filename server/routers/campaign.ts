@@ -313,9 +313,9 @@ export const campaignRouter = router({
     const withCounts = await Promise.all(
       rows.map(async c => {
         const taken = await db.countActiveParticipations(c.id);
-        // 무거운 photoGuideZip(base64, 최대 ~40MB)은 목록에서 제외 — 존재 여부만 노출.
-        const { photoGuideZip, ...rest } = c;
-        return { ...rest, hasPhotoGuideZip: !!photoGuideZip, taken, remaining: Math.max(0, c.slots - taken) };
+        // 무거운 photoGuideZip·invoiceExcel(base64)은 목록에서 제외 — 존재 여부만 노출.
+        const { photoGuideZip, invoiceExcel, ...rest } = c;
+        return { ...rest, hasPhotoGuideZip: !!photoGuideZip, hasInvoiceExcel: !!invoiceExcel, taken, remaining: Math.max(0, c.slots - taken) };
       })
     );
     return withCounts;
@@ -506,9 +506,9 @@ export const campaignRouter = router({
     const withCounts = await Promise.all(
       rows.map(async c => {
         const taken = await db.countActiveParticipations(c.id);
-        // Strip the heavy guide ZIP from the list payload; expose a flag.
-        const { photoGuideZip, ...rest } = c;
-        return { ...rest, hasPhotoGuideZip: !!photoGuideZip, taken, remaining: Math.max(0, c.slots - taken) };
+        // Strip the heavy guide ZIP / invoice excel from the list payload; expose flags.
+        const { photoGuideZip, invoiceExcel, ...rest } = c;
+        return { ...rest, hasPhotoGuideZip: !!photoGuideZip, hasInvoiceExcel: !!invoiceExcel, taken, remaining: Math.max(0, c.slots - taken) };
       })
     );
     return withCounts;
@@ -601,4 +601,26 @@ export const campaignRouter = router({
       );
       return withUser;
     }),
+
+  /** Admin: 송장번호를 채운 배송 엑셀을 캠페인에 업로드(저장). base64 data URL로 보관. */
+  uploadInvoiceExcel: adminProcedure
+    .input(z.object({
+      campaignId: z.number().int(),
+      dataUrl: z.string().min(1).max(20_000_000), // xlsx base64 data URL (수백 행도 수백 KB)
+      filename: z.string().trim().max(255),
+    }))
+    .mutation(async ({ input }) => {
+      const campaign = await db.getCampaignById(input.campaignId);
+      if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
+      await db.updateCampaign(input.campaignId, {
+        invoiceExcel: input.dataUrl,
+        invoiceExcelName: input.filename || "송장.xlsx",
+      });
+      return { success: true as const };
+    }),
+
+  /** Admin: 캠페인에 업로드된 배송 엑셀 다운로드 (base64 data URL + 파일명). 없으면 null. */
+  getInvoiceExcel: adminProcedure
+    .input(z.object({ campaignId: z.number().int() }))
+    .query(async ({ input }) => db.getInvoiceExcel(input.campaignId)),
 });

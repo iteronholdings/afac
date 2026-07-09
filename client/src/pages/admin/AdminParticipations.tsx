@@ -27,7 +27,7 @@ import {
   totalPayout,
 } from "@/lib/workflow";
 import { participationDeadline } from "@shared/const";
-import { CalendarPlus, CheckCircle2, ChevronDown, ChevronRight, FileSpreadsheet, Inbox, MessageCircle, Phone, Trash2, Wallet } from "lucide-react";
+import { CalendarPlus, CheckCircle2, ChevronDown, ChevronRight, Download, FileSpreadsheet, Inbox, MessageCircle, Phone, Trash2, Upload, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { downloadDeliveryExcel } from "@/lib/deliveryExcel";
@@ -50,7 +50,7 @@ type ListRow = {
   hasSearchProof: boolean;
   hasPurchaseProof: boolean;
   hasReviewProof: boolean;
-  campaign: { id: number; title: string; productPrice: number; commission: number } | null;
+  campaign: { id: number; title: string; productPrice: number; commission: number; invoiceExcelName?: string | null } | null;
   user: { id: number; fullName: string | null; loginId: string | null; phone: string | null; address: string | null } | null;
 };
 
@@ -322,6 +322,30 @@ export default function AdminParticipations() {
     })));
   };
 
+  // 송장 채운 엑셀 업로드/다운로드 (수동)
+  const uploadInvoice = trpc.campaign.uploadInvoiceExcel.useMutation({
+    onSuccess: () => {
+      utils.participation.listAll.invalidate();
+      toast.success("송장 엑셀을 업로드했어요.");
+    },
+    onError: e => toast.error(e.message),
+  });
+  const onPickInvoice = (campaignId: number, file: File) => {
+    if (!/\.xlsx?$/i.test(file.name)) { toast.error("엑셀 파일(.xlsx)만 업로드할 수 있어요."); return; }
+    const reader = new FileReader();
+    reader.onload = () => uploadInvoice.mutate({ campaignId, dataUrl: String(reader.result), filename: file.name });
+    reader.onerror = () => toast.error("파일을 읽지 못했어요.");
+    reader.readAsDataURL(file);
+  };
+  const downloadUploadedInvoice = async (campaignId: number) => {
+    const res = await utils.campaign.getInvoiceExcel.fetch({ campaignId });
+    if (!res) { toast.error("업로드된 엑셀이 없어요."); return; }
+    const a = document.createElement("a");
+    a.href = res.dataUrl;
+    a.download = res.name;
+    a.click();
+  };
+
   const toggleCampaign = (id: number) => {
     setExpandedCampaigns(prev => {
       const next = new Set(prev);
@@ -412,9 +436,26 @@ export default function AdminParticipations() {
                       완료 {group.rows.filter(r => r.status === "paid").length} / 확정 {group.rows.filter(r => r.status === "approved").length} / 검수중 {group.rows.filter(r => r.status === "reviewed").length}
                     </span>
                   </button>
+                  {/* 1) 자동 생성 다운로드  2) 송장 채운 엑셀 수동 업로드 */}
                   <Button size="sm" variant="outline" className="shrink-0 bg-card" onClick={() => downloadExcel(group)}>
-                    <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> 엑셀
+                    <FileSpreadsheet className="mr-1.5 h-3.5 w-3.5 text-emerald-600" /> 엑셀 다운로드
                   </Button>
+                  <input
+                    id={`invoice-upload-${group.campaignId}`}
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) onPickInvoice(group.campaignId, f); e.target.value = ""; }}
+                  />
+                  <Button size="sm" variant="outline" className="shrink-0 bg-card" disabled={uploadInvoice.isPending}
+                    onClick={() => document.getElementById(`invoice-upload-${group.campaignId}`)?.click()}>
+                    <Upload className="mr-1.5 h-3.5 w-3.5 text-primary" /> 엑셀 업로드
+                  </Button>
+                  {group.rows[0]?.campaign?.invoiceExcelName && (
+                    <Button size="sm" variant="ghost" className="shrink-0" onClick={() => downloadUploadedInvoice(group.campaignId)}>
+                      <Download className="mr-1.5 h-3.5 w-3.5" /> 업로드본
+                    </Button>
+                  )}
                 </div>
 
                 {/* 참여자 목록 — 인증샷은 펼쳤을 때만 지연 로딩 */}
