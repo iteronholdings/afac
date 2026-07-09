@@ -742,6 +742,16 @@ export async function listParticipationsByUser(userId: number) {
     .orderBy(desc(participations.appliedAt));
 }
 
+/** 캠페인 참여자들의 배정 사진 패킷을 초기화 (사진 ZIP 재업로드 시 재배정용). */
+export async function clearAssignedPacketsForCampaign(campaignId: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db
+    .update(participations)
+    .set({ assignedPacket: null, assignedName: null })
+    .where(eq(participations.campaignId, campaignId));
+}
+
 /**
  * 관리자 참여현황용 경량 조회 — 인증샷·패킷·원고(LONGTEXT)는 빼고 존재 플래그만 내려
  * 원격 DB 왕복과 응답 크기를 최소화한다. 인증샷은 proofsByCampaign으로 지연 로딩.

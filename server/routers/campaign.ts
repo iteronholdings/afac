@@ -401,11 +401,17 @@ export const campaignRouter = router({
     .input(z.object({ url: z.string().trim().url("올바른 URL을 입력해 주세요.") }))
     .mutation(async ({ input }) => {
       try {
+        // 쿠팡·네이버 봇차단 완화: 실제 브라우저에 가까운 헤더 세트.
         const res = await fetch(input.url, {
           headers: {
             "user-agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-            "accept-language": "ko-KR,ko;q=0.9",
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "accept-language": "ko-KR,ko;q=0.9,en;q=0.8",
+            "sec-ch-ua": '"Chromium";v="126", "Not:A-Brand";v="24"',
+            "sec-ch-ua-platform": '"Windows"',
+            "upgrade-insecure-requests": "1",
+            "referer": "https://www.google.com/",
           },
           redirect: "follow",
         });
@@ -422,13 +428,34 @@ export const campaignRouter = router({
           return m?.[1];
         };
 
-        const thumbnailUrl = meta("og:image") ?? null;
-        const title = meta("og:title") ?? null;
+        // JSON-LD(schema.org Product) — 쿠팡·스마트스토어가 자주 포함. price/image/name 추출.
+        let ldImage: string | undefined, ldTitle: string | undefined, ldPrice: string | undefined;
+        const ldRe = /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+        let ldm: RegExpExecArray | null;
+        while ((ldm = ldRe.exec(html)) !== null) {
+          try {
+            const nodes = [JSON.parse(ldm[1].trim())].flat();
+            const stack = [...nodes];
+            while (stack.length) {
+              const n = stack.shift();
+              if (!n || typeof n !== "object") continue;
+              if (Array.isArray((n as any)["@graph"])) stack.push(...(n as any)["@graph"]);
+              const offers = [(n as any).offers].flat().filter(Boolean);
+              for (const o of offers) if (o?.price != null && ldPrice == null) ldPrice = String(o.price);
+              if ((n as any).image && !ldImage) ldImage = [(n as any).image].flat()[0];
+              if ((n as any).name && !ldTitle) ldTitle = String((n as any).name);
+            }
+          } catch { /* 개별 LD 파싱 실패 무시 */ }
+        }
 
-        // price: try meta tags first, then JSON-LD, then a ₩/원 amount.
+        const thumbnailUrl = meta("og:image") ?? ldImage ?? null;
+        const title = meta("og:title") ?? ldTitle ?? null;
+
+        // price: meta → JSON-LD → "price":n → ₩/원 금액 순으로 시도.
         let priceRaw =
           meta("product:price:amount") ??
           meta("og:price:amount") ??
+          ldPrice ??
           html.match(/"price"\s*:\s*"?([0-9][0-9,]*)"?/i)?.[1] ??
           html.match(/([0-9]{1,3}(?:,[0-9]{3})+)\s*원/)?.[1];
         const price = priceRaw ? parseInt(priceRaw.replace(/[^0-9]/g, ""), 10) : null;
@@ -574,6 +601,35 @@ export const campaignRouter = router({
         throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
       }
       return assignPacketsForCampaign(campaign);
+    }),
+
+  /**
+   * Business/Admin: 사진 리뷰 ZIP을 새 파일로 교체하고 리뷰어에게 다시 배정한다.
+   * 기존 원본 ZIP·배정 패킷을 R2에서 정리하고, 참여자 배정을 초기화한 뒤 새 ZIP으로 재배정.
+   */
+  replacePhotoGuideZip: businessProcedure
+    .input(z.object({
+      campaignId: z.number().int(),
+      photoGuideZipKey: z.string().max(512).optional(),
+      photoGuideZip: z.string().optional(), // base64 폴백 (스토리지 미설정/소용량)
+      fileName: z.string().trim().max(255),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const campaign = await db.getCampaignById(input.campaignId);
+      if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
+      if (ctx.user.role !== "admin" && campaign.createdBy !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
+      }
+      const newZip = input.photoGuideZipKey ? `r2:${input.photoGuideZipKey}` : input.photoGuideZip;
+      if (!newZip) throw new TRPCError({ code: "BAD_REQUEST", message: "업로드된 ZIP이 없습니다." });
+
+      // 이전 원본 ZIP + 이미 배정된 패킷을 R2에서 삭제하고, 배정을 초기화 → 새 ZIP으로 재배정.
+      await cleanupCampaignStorage(campaign.id, campaign.photoGuideZip);
+      await db.clearAssignedPacketsForCampaign(campaign.id);
+      await db.updateCampaign(campaign.id, { photoGuideZip: newZip, photoGuideZipName: input.fileName });
+
+      const fresh = await db.getCampaignById(campaign.id);
+      return assignPacketsForCampaign(fresh!);
     }),
 
   // Business: list participations for a campaign they own (with proof photos).

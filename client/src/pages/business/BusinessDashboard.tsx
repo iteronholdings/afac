@@ -80,6 +80,7 @@ const TODAY_STR = (() => {
 
 export default function BusinessDashboard() {
   const [, navigate] = useLocation();
+  const utils = trpc.useUtils();
   const { data: campaigns, isLoading } = trpc.campaign.myBusiness.useQuery();
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [selectedProof, setSelectedProof] = useState<{ url: string; label: string } | null>(null);
@@ -94,6 +95,42 @@ export default function BusinessDashboard() {
     onSuccess: (res) => toast.success(`${res.assigned}명에게 가이드 ZIP을 할당했어요! (유닛 ${res.units}개 / 참여 ${res.participants}명)`),
     onError: err => toast.error(err.message),
   });
+
+  // 사진 리뷰 ZIP 다시 업로드 (기존 배정 초기화 후 새 사진으로 재배정)
+  const [reuploadingId, setReuploadingId] = useState<number | null>(null);
+  const presignZip = trpc.campaign.zipUploadUrl.useMutation();
+  const replaceZip = trpc.campaign.replacePhotoGuideZip.useMutation();
+  const reuploadPhotoZip = async (campaignId: number, file: File) => {
+    if (!/\.zip$/i.test(file.name)) { toast.error("ZIP(.zip) 파일만 올릴 수 있어요."); return; }
+    setReuploadingId(campaignId);
+    try {
+      let key: string | undefined;
+      let base64: string | undefined;
+      try {
+        const { url, key: k } = await presignZip.mutateAsync({ fileName: file.name });
+        const put = await fetch(url, { method: "PUT", body: file });
+        if (!put.ok) throw new Error(`R2 upload ${put.status}`);
+        key = k;
+      } catch (e) {
+        // 프리사인 실패/스토리지 미설정 → 소용량은 base64 폴백
+        if (file.size > 45 * 1024 * 1024) throw e;
+        base64 = await new Promise<string>((res, rej) => {
+          const rd = new FileReader();
+          rd.onload = () => res(String(rd.result));
+          rd.onerror = rej;
+          rd.readAsDataURL(file);
+        });
+      }
+      const r = await replaceZip.mutateAsync({ campaignId, photoGuideZipKey: key, photoGuideZip: base64, fileName: file.name });
+      await utils.campaign.myBusiness.invalidate();
+      await utils.campaign.campaignParticipants.invalidate();
+      toast.success(`사진을 다시 업로드했어요! ${r.assigned}명 재배정 (유닛 ${r.units}개)`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "사진 재업로드에 실패했어요.");
+    } finally {
+      setReuploadingId(null);
+    }
+  };
 
   return (
     <ClientLayout
@@ -206,6 +243,24 @@ export default function BusinessDashboard() {
                             가이드 ZIP 리뷰어 할당
                           </Button>
                         )}
+                        {/* 사진 리뷰 ZIP 다시 업로드 → 기존 배정 초기화 후 새 사진으로 재배정 */}
+                        <input
+                          id={`photozip-reupload-${c.id}`}
+                          type="file"
+                          accept=".zip"
+                          className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) reuploadPhotoZip(c.id, f); e.target.value = ""; }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 rounded-full bg-card"
+                          disabled={reuploadingId === c.id}
+                          onClick={() => document.getElementById(`photozip-reupload-${c.id}`)?.click()}
+                        >
+                          {reuploadingId === c.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FolderArchive className="h-3.5 w-3.5 text-primary" />}
+                          {c.hasPhotoGuideZip ? "사진 다시 업로드" : "사진 ZIP 업로드"}
+                        </Button>
                         </div>
                       </div>
 
