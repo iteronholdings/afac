@@ -137,11 +137,11 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
                 </div>
               ) : (
                 <div className="grid max-w-lg grid-cols-3 gap-3">
-                  <ProofThumb url={pf?.searchProofUrl} label="검색 인증샷"
+                  <ProofThumb url={pf?.searchProofUrl} label="검색 인증샷" time={pf?.searchedAt}
                     onReject={() => setProofReject({ id: r.id, kind: "search", label: "검색 인증샷", name: r.user?.fullName ?? "리뷰어" })} />
-                  <ProofThumb url={pf?.purchaseProofUrl} label="구매 인증샷"
+                  <ProofThumb url={pf?.purchaseProofUrl} label="구매 인증샷" time={pf?.purchasedAt}
                     onReject={() => setProofReject({ id: r.id, kind: "purchase", label: "구매 인증샷", name: r.user?.fullName ?? "리뷰어" })} />
-                  <ProofThumb url={pf?.reviewProofUrl} label="리뷰 인증샷"
+                  <ProofThumb url={pf?.reviewProofUrl} label="리뷰 인증샷" time={pf?.reviewedAt}
                     onReject={() => setProofReject({ id: r.id, kind: "review", label: "리뷰 인증샷", name: r.user?.fullName ?? "리뷰어" })} />
                 </div>
               )}

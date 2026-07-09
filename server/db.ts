@@ -794,6 +794,10 @@ export async function listProofsByCampaign(campaignId: number) {
     searchProofUrl: participations.searchProofUrl,
     purchaseProofUrl: participations.purchaseProofUrl,
     reviewProofUrl: participations.reviewProofUrl,
+    // 각 인증샷 등록 시각 — 관리자 참여현황에서 "몇 시에 등록했는지" 표시용.
+    searchedAt: participations.searchedAt,
+    purchasedAt: participations.purchasedAt,
+    reviewedAt: participations.reviewedAt,
   }).from(participations).where(eq(participations.campaignId, campaignId));
 }
 

@@ -265,7 +265,7 @@ async function listOpenForReviewers() {
   for (const c of rows) {
     const parts = await db.listParticipationsByCampaign(c.id);
     const taken = parts.filter(p => p.status !== "rejected").length;
-    const dist = distributeTodayStatus(c.schedule, parts);
+    const dist = distributeTodayStatus(c.schedule, parts, c.slots);
     // 무거운 photoGuideZip(레거시 base64)은 목록에서 제외.
     const { photoGuideZip: _zip, ...light } = c;
     if (dist.isDistribute) {

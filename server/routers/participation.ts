@@ -136,7 +136,7 @@ export const participationRouter = router({
 
       // 배분 캠페인은 **오늘 배분된 정원**에만 참여 가능 (미래 날짜 선점 금지 → 진행일 펑크 방지).
       const partsForDate = await db.listParticipationsByCampaign(input.campaignId);
-      const dist = distributeTodayStatus(campaign.schedule, partsForDate);
+      const dist = distributeTodayStatus(campaign.schedule, partsForDate, campaign.slots);
       let assignedDate: string | null = null;
       if (dist.isDistribute) {
         if (dist.reason === "not_today") {
