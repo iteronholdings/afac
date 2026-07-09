@@ -13,6 +13,11 @@ import { toast } from "sonner";
 
 const ALLOWED_MIME = ["image/png", "image/jpeg", "image/jpg", "image/webp"] as const;
 
+/** 역할 → 상대방 표기용 라벨. */
+function roleLabel(role?: string) {
+  return role === "business" ? "업체" : role === "admin" ? "운영팀" : "리뷰어";
+}
+
 function compressImage(file: File, maxPx = 1200, quality = 0.75): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -183,7 +188,10 @@ function ConversationList({
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1">
-                  <p className="truncate text-sm font-semibold text-foreground">{c.reviewerName}</p>
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {c.reviewerName}
+                    <span className="ml-1 font-normal text-muted-foreground">({roleLabel(c.reviewerRole)})</span>
+                  </p>
                   {c.unread > 0 && (
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
                       {c.unread > 9 ? "9+" : c.unread}
@@ -227,6 +235,14 @@ function ChatWindow({
     { reviewerId: isAdmin ? reviewerId : undefined },
     { refetchInterval: 3000 }
   );
+
+  // 상대방 이름·역할은 대화 목록(conversations)에서 확실하게 조회 — 리뷰어가 아직
+  // 답장하지 않아 메시지에 이름이 없어도 "리뷰어"로만 뜨지 않게 한다. (관리자 전용 쿼리)
+  const { data: convs = [] } = trpc.directMessage.conversations.useQuery(undefined, {
+    enabled: isAdmin,
+    refetchInterval: 5000,
+  });
+  const conv = convs.find(c => c.reviewerId === reviewerId);
 
   const markRead = trpc.directMessage.markRead.useMutation({
     onSuccess: () => {
@@ -278,8 +294,12 @@ function ChatWindow({
     });
   };
 
-  // get reviewer name from messages, or use the name passed in externally, or fallback
-  const reviewerName = msgs.find(m => m.senderRole !== "admin")?.senderName ?? initialReviewerName ?? "리뷰어";
+  // 상대방 이름·역할: 대화 목록 → 메시지 발신자 → 외부에서 전달된 이름 순으로 확정.
+  const partnerFromMsg = msgs.find(m => m.senderRole !== "admin");
+  const reviewerName = conv?.reviewerName ?? partnerFromMsg?.senderName ?? initialReviewerName ?? "리뷰어";
+  const reviewerRole = conv?.reviewerRole ?? partnerFromMsg?.senderRole ?? "user";
+  // "이름(리뷰어)" / "이름(업체)" 형태 헤더.
+  const partnerTitle = `${reviewerName}(${roleLabel(reviewerRole)})`;
 
   return (
     <div className="flex h-[min(480px,72vh)] w-[min(20rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card shadow-2xl">
@@ -294,12 +314,12 @@ function ChatWindow({
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
             {isAdmin ? reviewerName.charAt(0) : "운"}
           </span>
-          <div>
-            <p className="text-sm font-semibold text-foreground">
-              {isAdmin ? reviewerName : "운영팀"}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-foreground">
+              {isAdmin ? partnerTitle : "운영팀"}
             </p>
-            <p className="text-[11px] text-muted-foreground">
-              {isAdmin ? "리뷰어 문의" : "아르벤팩토리 운영팀"}
+            <p className="truncate text-[11px] text-muted-foreground">
+              {isAdmin ? (conv?.reviewerLoginId || `${roleLabel(reviewerRole)} 문의`) : "아르벤팩토리 운영팀"}
             </p>
           </div>
         </div>

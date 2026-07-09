@@ -355,12 +355,8 @@ export default function AdminParticipations() {
     });
   };
 
-  // 처음 로드 시 모든 캠페인 펼침
-  useMemo(() => {
-    if (grouped.length > 0) {
-      setExpandedCampaigns(new Set(grouped.map(g => g.campaignId)));
-    }
-  }, [grouped.map(g => g.campaignId).join(",")]);
+  // 기본은 모두 접힌 상태 — 캠페인 헤더를 클릭해야 참여자 목록이 펼쳐진다.
+  // (자동 펼침을 없애 인증샷 지연 로딩도 클릭 시에만 발생)
 
   return (
     <AdminLayout
