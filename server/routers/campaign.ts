@@ -381,10 +381,9 @@ export const campaignRouter = router({
       if (input.status === "rejected") {
         await refundCampaignIfPaid(existing, ctx.user.id);
       }
-      // 캠페인 완료(closed) 또는 반려 시 R2에 저장된 원본 ZIP·패킷 삭제 (B안 — 비용 최소화).
-      if (input.status === "closed" || input.status === "rejected") {
-        await cleanupCampaignStorage(existing.id, existing.photoGuideZip);
-      }
+      // 주의: 완료(closed)로 바꿔도 R2 패킷·가이드 ZIP은 지우지 않는다.
+      // 리뷰어가 완료 후에도 배정 사진을 다시 내려받을 수 있어야 하기 때문(삭제하면 다운로드 시 NoSuchKey).
+      // 실제 스토리지 정리는 캠페인 '삭제' 시(cleanupCampaignStorage)와 ZIP '재업로드' 시에만 수행한다.
       const updated = await db.updateCampaign(input.id, { status: input.status });
       // 첫 승인(pending → open)일 때만 카톡 단톡방 공지 큐에 적재. (모집 재개 반복 발송 방지)
       if (input.status === "open" && existing.status === "pending") {

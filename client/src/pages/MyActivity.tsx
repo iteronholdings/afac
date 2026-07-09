@@ -94,7 +94,7 @@ export default function MyActivity() {
       a.click();
       a.remove();
     } catch (e) {
-      toast.error("다운로드에 실패했습니다.");
+      toast.error(e instanceof Error && e.message ? e.message : "다운로드에 실패했습니다.");
     }
   };
   const copyDraft = async (text: string) => {

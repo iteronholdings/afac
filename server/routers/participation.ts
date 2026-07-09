@@ -2,6 +2,7 @@ import { isCompleteAddress, PARTICIPATION_DEADLINE_DAYS, participationDeadline }
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { notifyReviewerChatSms } from "../chatNotify";
+import { storageExists } from "../storage";
 import * as db from "../db";
 import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
 import { assignPacketsForCampaign } from "./campaign";
@@ -93,6 +94,13 @@ export const participationRouter = router({
       // R2 키(`r2:<key>`)면 스토리지 프록시 URL을, 레거시면 base64 데이터 URL을 반환.
       if (packet && packet.startsWith("r2:")) {
         const key = packet.slice(3);
+        // 파일이 이미 삭제된 경우(과거 완료 처리 등) raw NoSuchKey XML 대신 안내 메시지로 처리.
+        if (!(await storageExists(key).catch(() => true))) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "배정된 사진 파일을 찾을 수 없어요. 업체에 사진 재업로드를 요청해 주세요.",
+          });
+        }
         return { name, url: `/manus-storage/${key}?dl=${encodeURIComponent(name)}`, dataUrl: null };
       }
       return { name, url: null, dataUrl: packet ?? null };

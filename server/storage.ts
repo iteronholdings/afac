@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { ENV } from "./_core/env";
 
@@ -106,7 +106,21 @@ export async function storageGetBytes(relKey: string): Promise<Buffer> {
   return Buffer.from(await body.transformToByteArray());
 }
 
-/** R2 객체를 삭제한다. (캠페인 완료 시 알집·패킷 정리 — 비용 최소화) */
+/** R2에 해당 키의 객체가 존재하는지 확인한다. (삭제된 패킷 다운로드 전 확인용) */
+export async function storageExists(relKey: string): Promise<boolean> {
+  const client = getS3Client();
+  const key = normalizeKey(relKey);
+  try {
+    await client.send(new HeadObjectCommand({ Bucket: ENV.s3Bucket, Key: key }));
+    return true;
+  } catch (e) {
+    const err = e as { name?: string; $metadata?: { httpStatusCode?: number } };
+    if (err?.name === "NotFound" || err?.$metadata?.httpStatusCode === 404) return false;
+    throw e; // 그 외 오류(권한 등)는 그대로 전파
+  }
+}
+
+/** R2 객체를 삭제한다. (캠페인 삭제·ZIP 재업로드 시 알집·패킷 정리 — 비용 최소화) */
 export async function storageDelete(relKey: string): Promise<void> {
   const client = getS3Client();
   const key = normalizeKey(relKey);
