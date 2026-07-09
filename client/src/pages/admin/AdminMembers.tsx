@@ -12,8 +12,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import AddressSearchInput from "@/components/AddressSearchInput";
 import {
   Table,
   TableBody,
@@ -24,8 +33,8 @@ import {
 } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
 import { memberMatchesQuery } from "@/lib/memberSearch";
-import { Check, Copy, Crown, MapPin, MessageCircle, Pencil, RotateCcw, Search, Shield, ShieldCheck, ShieldOff, UserX, Users, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Check, Copy, Crown, MapPin, MessageCircle, Pencil, RotateCcw, Search, Shield, ShieldCheck, ShieldOff, UserCog, UserX, Users, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 export default function AdminMembers() {
@@ -78,6 +87,11 @@ export default function AdminMembers() {
 
   // memberCode inline edit state: memberId → draft string
   const [editingCode, setEditingCode] = useState<Record<number, string>>({});
+
+  // 회원 정보(아이디·전화번호·주소) 수정 다이얼로그 대상
+  const [editTarget, setEditTarget] = useState<
+    { id: number; loginId: string | null; phone: string | null; address: string | null; fullName: string | null; name: string | null; isOwner: boolean } | null
+  >(null);
 
   const setRoleMutation = trpc.admin.setRole.useMutation({
     onSuccess: () => {
@@ -272,6 +286,14 @@ export default function AdminMembers() {
 
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="bg-card"
+                        onClick={() => setEditTarget({ id: m.id, loginId: m.loginId, phone: m.phone, address: m.address, fullName: m.fullName, name: m.name, isOwner: m.isOwner })}
+                      >
+                        <UserCog className="mr-1.5 h-3.5 w-3.5" /> 정보수정
+                      </Button>
                       {!m.isSelf && m.role !== "admin" && !m.isOwner && (
                         <Button
                           size="sm"
@@ -359,6 +381,107 @@ export default function AdminMembers() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* 회원 정보(아이디·전화번호·주소) 수정 */}
+      <MemberEditDialog member={editTarget} onClose={() => setEditTarget(null)} />
     </AdminLayout>
+  );
+}
+
+/** 관리자: 회원 아이디·전화번호·주소 수정 다이얼로그. */
+function MemberEditDialog({
+  member,
+  onClose,
+}: {
+  member: { id: number; loginId: string | null; phone: string | null; address: string | null; fullName: string | null; name: string | null; isOwner: boolean } | null;
+  onClose: () => void;
+}) {
+  const utils = trpc.useUtils();
+  const [loginId, setLoginId] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+
+  // 대상이 바뀌면 현재 값으로 초기화
+  useEffect(() => {
+    setLoginId(member?.loginId ?? "");
+    setPhone(member?.phone ?? "");
+    setAddress(member?.address ?? "");
+  }, [member?.id]);
+
+  const update = trpc.admin.updateMemberInfo.useMutation({
+    onSuccess: () => {
+      utils.admin.listMembers.invalidate();
+      toast.success("회원 정보를 수정했어요.");
+      onClose();
+    },
+    onError: e => toast.error(e.message),
+  });
+
+  const name = member?.fullName || member?.name || "회원";
+
+  const save = () => {
+    if (!member) return;
+    const patch: { userId: number; loginId?: string; phone?: string; address?: string } = { userId: member.id };
+    const nextLoginId = loginId.trim();
+    const nextPhone = phone.trim();
+    const nextAddress = address.trim();
+    if (!member.isOwner && nextLoginId && nextLoginId !== (member.loginId ?? "")) patch.loginId = nextLoginId;
+    if (nextPhone !== (member.phone ?? "")) patch.phone = nextPhone;
+    if (nextAddress !== (member.address ?? "")) patch.address = nextAddress;
+
+    if (patch.loginId === undefined && patch.phone === undefined && patch.address === undefined) {
+      toast.info("변경된 내용이 없습니다.");
+      onClose();
+      return;
+    }
+    update.mutate(patch);
+  };
+
+  return (
+    <Dialog open={member !== null} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{name} 님 정보 수정</DialogTitle>
+          <DialogDescription>아이디·전화번호·주소를 관리자 권한으로 변경합니다.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-1">
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-foreground">아이디</label>
+            <Input
+              value={loginId}
+              onChange={e => setLoginId(e.target.value)}
+              disabled={member?.isOwner}
+              placeholder="영문·숫자·밑줄 4~20자"
+              className="h-11"
+            />
+            {member?.isOwner && (
+              <p className="text-xs text-muted-foreground">최상위 관리자 아이디는 변경할 수 없습니다.</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-foreground">전화번호</label>
+            <Input
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              placeholder="010-1234-5678"
+              inputMode="tel"
+              className="h-11"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-foreground">주소 (택배 수령용)</label>
+            <AddressSearchInput key={member?.id ?? "none"} value={address} onChange={setAddress} />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" className="bg-card" onClick={onClose} disabled={update.isPending}>취소</Button>
+          <Button onClick={save} disabled={update.isPending}>{update.isPending ? "저장 중..." : "저장"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -100,6 +100,44 @@ export const adminRouter = router({
       return db.setMemberCode(input.userId, input.memberCode.trim());
     }),
 
+  /** 관리자: 회원 아이디·전화번호·주소 수정. 제공된 필드만 갱신한다. */
+  updateMemberInfo: adminProcedure
+    .input(z.object({
+      userId: z.number().int(),
+      loginId: z.string().trim()
+        .min(4, "아이디는 4자 이상이어야 합니다.")
+        .max(20, "아이디는 20자 이하여야 합니다.")
+        .regex(/^[a-zA-Z0-9_]+$/, "아이디는 영문, 숫자, 밑줄(_)만 사용할 수 있습니다.")
+        .optional(),
+      phone: z.string().trim()
+        .min(9, "전화번호를 정확히 입력해 주세요.")
+        .max(20, "전화번호가 너무 깁니다.")
+        .regex(/^[0-9+\-\s]+$/, "전화번호 형식이 올바르지 않습니다.")
+        .optional(),
+      address: z.string().trim().max(255).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const target = await db.getUserById(input.userId);
+      if (!target) throw new TRPCError({ code: "NOT_FOUND", message: "회원을 찾을 수 없습니다." });
+
+      // 아이디 변경 시: 최상위 관리자 보호 + 다른 회원과 중복 방지.
+      if (input.loginId !== undefined && input.loginId !== target.loginId) {
+        if (isOwner(target.loginId)) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "최상위 관리자의 아이디는 변경할 수 없습니다." });
+        }
+        const dup = await db.getUserByLoginId(input.loginId);
+        if (dup && dup.id !== input.userId) {
+          throw new TRPCError({ code: "CONFLICT", message: "이미 사용 중인 아이디입니다." });
+        }
+      }
+
+      return db.setUserContactInfo(input.userId, {
+        loginId: input.loginId,
+        phone: input.phone,
+        address: input.address,
+      });
+    }),
+
   /** Admin: reset any member's password (also usable on self). */
   setMemberPassword: adminProcedure
     .input(z.object({

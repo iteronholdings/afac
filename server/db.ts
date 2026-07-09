@@ -470,6 +470,26 @@ export async function setUserAddress(id: number, address: string) {
   return getUserById(id);
 }
 
+/**
+ * 관리자: 회원 연락처·아이디·주소 수정 (제공된 필드만 갱신).
+ * openId는 그대로 둬 진행 중인 세션이 끊기지 않게 한다(로그인은 loginId 컬럼으로 조회).
+ */
+export async function setUserContactInfo(
+  id: number,
+  patch: { phone?: string; loginId?: string; address?: string }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const set: Partial<{ phone: string; loginId: string; address: string }> = {};
+  if (patch.phone !== undefined) set.phone = patch.phone;
+  if (patch.loginId !== undefined) set.loginId = patch.loginId;
+  if (patch.address !== undefined) set.address = patch.address;
+  if (Object.keys(set).length > 0) {
+    await db.update(users).set(set).where(eq(users.id, id));
+  }
+  return getUserById(id);
+}
+
 /** 관리자 강제 탈퇴(블랙) 처리/복구. */
 export async function setWithdrawn(id: number, withdrawn: boolean) {
   const db = await getDb();
