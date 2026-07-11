@@ -265,9 +265,14 @@ export const adminRouter = router({
       return updated;
     }),
 
-  /** 정산 대기 목록: approved 상태의 참여자 + 리뷰어 계좌 정보 */
-  settlementList: adminProcedure.query(async () => {
-    const parts = await db.listParticipations({ status: "approved" });
+  /**
+   * 정산 목록: 기본은 approved(정산 대기), status="paid"면 입금 완료 건을 계좌 정보와 함께 반환.
+   * 완료 건도 조회할 수 있어야 실수로 일괄 입금완료 처리해도 정보가 사라지지 않는다.
+   */
+  settlementList: adminProcedure
+    .input(z.object({ status: z.enum(["approved", "paid"]).default("approved") }).optional())
+    .query(async ({ input }) => {
+    const parts = await db.listParticipations({ status: input?.status ?? "approved" });
     return Promise.all(
       parts.map(async p => {
         const campaign = await db.getCampaignById(p.campaignId);
@@ -278,6 +283,7 @@ export const adminRouter = router({
         return {
           participationId: p.id,
           approvedAt: p.approvedAt,
+          paidAt: p.paidAt,
           payout,
           campaignTitle: campaign?.title ?? "-",
           user: user

@@ -16,15 +16,17 @@ import * as XLSX from "xlsx";
 
 export default function AdminSettlement() {
   const utils = trpc.useUtils();
-  const { data = [], isLoading } = trpc.admin.settlementList.useQuery();
+  // 탭: 정산 대기(approved) / 입금 완료(paid) — 완료 건도 계좌 정보가 계속 보이게.
+  const [tab, setTab] = useState<"approved" | "paid">("approved");
+  const { data = [], isLoading } = trpc.admin.settlementList.useQuery({ status: tab });
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
   const setStatusMutation = trpc.participation.setStatus.useMutation({
-    onSuccess: () => {
+    onSuccess: (_d, vars) => {
       utils.admin.settlementList.invalidate();
       utils.participation.listAll.invalidate();
       setSelected(new Set());
-      toast.success("입금 완료 처리되었습니다.");
+      toast.success(vars.status === "paid" ? "입금 완료 처리되었습니다." : "정산 대기로 되돌렸습니다.");
     },
     onError: err => toast.error(err.message),
   });
@@ -61,6 +63,21 @@ export default function AdminSettlement() {
         setStatusMutation.mutateAsync({ participationId: id, status: "paid" })
       )
     ).catch(() => {});
+  };
+
+  // 입금 완료 탭: 실수로 완료 처리한 건을 정산 대기로 되돌린다.
+  const handleUnpayAll = () => {
+    if (!someSelected) return;
+    Promise.all(
+      Array.from(selected).map(id =>
+        setStatusMutation.mutateAsync({ participationId: id, status: "approved" })
+      )
+    ).catch(() => {});
+  };
+
+  const switchTab = (t: "approved" | "paid") => {
+    setTab(t);
+    setSelected(new Set());
   };
 
   const handleExcel = () => {
@@ -114,7 +131,7 @@ export default function AdminSettlement() {
             <Download className="h-4 w-4" />
             엑셀 다운로드{someSelected ? ` (${selected.size}건)` : ""}
           </Button>
-          {someSelected && (
+          {someSelected && tab === "approved" && (
             <Button
               className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
               disabled={setStatusMutation.isPending}
@@ -125,9 +142,31 @@ export default function AdminSettlement() {
               입금 완료 처리 ({selected.size}건, {formatKRW(totalPayout)})
             </Button>
           )}
+          {someSelected && tab === "paid" && (
+            <Button
+              variant="outline"
+              className="gap-1.5 bg-card"
+              disabled={setStatusMutation.isPending}
+              onClick={handleUnpayAll}
+            >
+              {setStatusMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              정산 대기로 되돌리기 ({selected.size}건)
+            </Button>
+          )}
         </div>
       }
     >
+      {/* 정산 대기 / 입금 완료 탭 */}
+      <div className="mb-4 flex gap-2">
+        {([["approved", "정산 대기"], ["paid", "입금 완료"]] as const).map(([v, label]) => (
+          <button key={v} type="button" onClick={() => switchTab(v)}
+            className={`rounded-full border-2 px-4 py-1.5 text-sm font-bold transition-all ${
+              tab === v ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:border-primary/40"
+            }`}>
+            {label}
+          </button>
+        ))}
+      </div>
       {isLoading ? (
         <div className="space-y-3">
           {Array.from({ length: 4 }).map((_, i) => (
@@ -139,8 +178,12 @@ export default function AdminSettlement() {
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
             <Receipt className="h-6 w-6 text-muted-foreground" />
           </div>
-          <p className="font-semibold">지급 확정 대기 중인 정산이 없습니다</p>
-          <p className="text-sm text-muted-foreground">참여 현황에서 '지급 확정' 처리를 하면 여기에 표시됩니다.</p>
+          <p className="font-semibold">{tab === "approved" ? "지급 확정 대기 중인 정산이 없습니다" : "입금 완료된 정산이 없습니다"}</p>
+          <p className="text-sm text-muted-foreground">
+            {tab === "approved"
+              ? "참여 현황에서 '지급 확정' 처리를 하면 여기에 표시됩니다. 이미 입금 완료했다면 '입금 완료' 탭에서 볼 수 있어요."
+              : "정산 대기 탭에서 입금 완료 처리하면 여기로 이동합니다."}
+          </p>
         </div>
       ) : (
         <div className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
@@ -187,6 +230,11 @@ export default function AdminSettlement() {
                   </div>
                   <div className="font-medium text-foreground">
                     {r.user?.fullName ?? "-"}
+                    {tab === "paid" && r.paidAt && (
+                      <p className="text-[11px] font-normal text-muted-foreground">
+                        입금 {new Date(r.paidAt).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-mono font-medium text-muted-foreground">

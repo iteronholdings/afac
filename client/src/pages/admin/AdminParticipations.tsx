@@ -27,7 +27,7 @@ import {
   totalPayout,
 } from "@/lib/workflow";
 import { participationDeadline } from "@shared/const";
-import { CalendarPlus, CheckCircle2, ChevronDown, ChevronRight, Download, FileSpreadsheet, Inbox, MessageCircle, Phone, Trash2, Upload, Wallet } from "lucide-react";
+import { CalendarPlus, CheckCircle2, ChevronDown, ChevronRight, Download, FileSpreadsheet, FolderArchive, Inbox, MessageCircle, Phone, Trash2, Upload, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { downloadDeliveryExcel } from "@/lib/deliveryExcel";
@@ -346,6 +346,41 @@ export default function AdminParticipations() {
     a.click();
   };
 
+  // 사진 리뷰 ZIP 재업로드 (관리자) — 사진이 유실된 캠페인 복구용. 배정 초기화 후 새 사진으로 재배정.
+  const [reuploadingId, setReuploadingId] = useState<number | null>(null);
+  const presignZip = trpc.campaign.zipUploadUrl.useMutation();
+  const replaceZip = trpc.campaign.replacePhotoGuideZip.useMutation();
+  const reuploadPhotoZip = async (campaignId: number, file: File) => {
+    if (!/\.zip$/i.test(file.name)) { toast.error("ZIP(.zip) 파일만 올릴 수 있어요."); return; }
+    setReuploadingId(campaignId);
+    try {
+      let key: string | undefined;
+      let base64: string | undefined;
+      try {
+        const { url, key: k } = await presignZip.mutateAsync({ fileName: file.name });
+        const put = await fetch(url, { method: "PUT", body: file });
+        if (!put.ok) throw new Error(`R2 upload ${put.status}`);
+        key = k;
+      } catch (e) {
+        if (file.size > 45 * 1024 * 1024) throw e;
+        base64 = await new Promise<string>((res, rej) => {
+          const rd = new FileReader();
+          rd.onload = () => res(String(rd.result));
+          rd.onerror = rej;
+          rd.readAsDataURL(file);
+        });
+      }
+      const r = await replaceZip.mutateAsync({ campaignId, photoGuideZipKey: key, photoGuideZip: base64, fileName: file.name });
+      utils.participation.listAll.invalidate();
+      utils.participation.proofsByCampaign.invalidate({ campaignId });
+      toast.success(`사진을 다시 업로드했어요! ${r.assigned}명 재배정 (유닛 ${r.units}개)`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "사진 재업로드에 실패했어요.");
+    } finally {
+      setReuploadingId(null);
+    }
+  };
+
   const toggleCampaign = (id: number) => {
     setExpandedCampaigns(prev => {
       const next = new Set(prev);
@@ -452,6 +487,19 @@ export default function AdminParticipations() {
                       <Download className="mr-1.5 h-3.5 w-3.5" /> 업로드본
                     </Button>
                   )}
+                  {/* 사진 유실 복구: 새 ZIP 업로드 → 배정 초기화 후 재배정 */}
+                  <input
+                    id={`photozip-admin-${group.campaignId}`}
+                    type="file"
+                    accept=".zip,application/zip,application/x-zip-compressed"
+                    className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) reuploadPhotoZip(group.campaignId, f); e.target.value = ""; }}
+                  />
+                  <Button size="sm" variant="outline" className="shrink-0 bg-card" disabled={reuploadingId === group.campaignId}
+                    onClick={() => document.getElementById(`photozip-admin-${group.campaignId}`)?.click()}>
+                    <FolderArchive className="mr-1.5 h-3.5 w-3.5 text-amber-600" />
+                    {reuploadingId === group.campaignId ? "업로드 중..." : "사진 재업로드"}
+                  </Button>
                 </div>
 
                 {/* 참여자 목록 — 인증샷은 펼쳤을 때만 지연 로딩 */}
