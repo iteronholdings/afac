@@ -462,6 +462,17 @@ export async function setCustomReviewFee(id: number, fee: number | null) {
   return getUserById(id);
 }
 
+/** 정산 계좌 수정 (내 정보). */
+export async function setUserBankInfo(
+  id: number,
+  info: { bankName: string; bankAccount: string; bankHolder: string }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set(info).where(eq(users.id, id));
+  return getUserById(id);
+}
+
 /** 주소 수정 (내 정보). */
 export async function setUserAddress(id: number, address: string) {
   const db = await getDb();

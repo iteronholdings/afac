@@ -254,6 +254,20 @@ export const authRouter = router({
       return { success: true as const };
     }),
 
+  /** 내 정보: 정산 계좌 수정 (리뷰어 지급용 은행·계좌번호·예금주). */
+  updateBankInfo: protectedProcedure
+    .input(z.object({
+      bankName: z.string().trim().min(1, "은행명을 입력해 주세요.").max(50, "은행명이 너무 깁니다."),
+      bankAccount: z.string().trim()
+        .min(6, "계좌번호를 정확히 입력해 주세요.").max(50, "계좌번호가 너무 깁니다.")
+        .regex(/^[0-9-]+$/, "계좌번호는 숫자와 하이픈(-)만 입력할 수 있습니다."),
+      bankHolder: z.string().trim().min(1, "예금주를 입력해 주세요.").max(50, "예금주가 너무 깁니다."),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      await db.setUserBankInfo(ctx.user.id, input);
+      return { success: true as const };
+    }),
+
   // 리뷰어: 절차 안내를 읽고 동의. 동의해야 캠페인 참여 등 리뷰어 활동 가능.
   agreeReviewerTerms: protectedProcedure.mutation(async ({ ctx }) => {
     if (ctx.user.role !== "user") {
