@@ -447,10 +447,10 @@ export default function AdminParticipations() {
             const isOpen = expandedCampaigns.has(group.campaignId);
             return (
               <div key={group.campaignId} className="overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm">
-                {/* 캠페인 헤더 */}
-                <div className="flex items-center gap-2 px-5 py-3.5 hover:bg-muted/40 transition-colors">
+                {/* 캠페인 헤더 — 모바일: 제목 줄 + 버튼 줄로 감싸 내려 제목이 짜부라지지 않게 */}
+                <div className="flex flex-wrap items-center gap-2 px-4 py-3.5 hover:bg-muted/40 transition-colors sm:px-5">
                   <button
-                    className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+                    className="flex w-full min-w-0 items-center justify-between gap-3 text-left sm:w-auto sm:flex-1"
                     onClick={() => toggleCampaign(group.campaignId)}
                   >
                     <div className="flex min-w-0 items-center gap-2.5">

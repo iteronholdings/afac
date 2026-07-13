@@ -209,9 +209,9 @@ export default function BusinessDashboard() {
                   {/* Participants panel */}
                   {expanded && (
                     <div className="border-t border-border/60 bg-muted/20 px-5 py-4">
-                      <div className="mb-3 flex items-center justify-between gap-2">
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                         <h4 className="text-sm font-semibold text-foreground">리뷰어 참여 현황</h4>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                         {/* 배송용 엑셀 (번호·상품명·성함·금액·연락처·주소·택배사·운송장) */}
                         <Button
                           size="sm"

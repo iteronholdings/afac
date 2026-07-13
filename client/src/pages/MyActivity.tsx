@@ -85,11 +85,16 @@ export default function MyActivity() {
       const res = await utils.participation.myPacket.fetch({ participationId });
       const href = res.url ?? res.dataUrl;
       if (!href) { toast.error("할당된 가이드가 없습니다."); return; }
+      if (res.url) {
+        // 같은 탭 이동으로 다운로드 — 응답이 첨부파일(Content-Disposition)이라 페이지는 유지된다.
+        // (새 탭 방식은 비동기 호출 뒤라 모바일·카톡 인앱 브라우저가 팝업으로 차단함)
+        window.location.assign(res.url);
+        toast.success("사진 다운로드를 시작했어요.");
+        return;
+      }
       const a = document.createElement("a");
       a.href = href;
       a.download = res.name;
-      // R2 프록시 URL은 새 탭으로 열어 안전하게 다운로드(서명 URL 리다이렉트).
-      if (res.url) a.target = "_blank";
       document.body.appendChild(a);
       a.click();
       a.remove();
