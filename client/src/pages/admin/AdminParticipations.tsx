@@ -336,9 +336,17 @@ export default function AdminParticipations() {
   // 필터 드롭다운용 — 썸네일까지 실려 오는 campaign.listAll 대신 id·제목만 가볍게.
   const { data: campaigns } = trpc.campaign.titles.useQuery();
 
-  const [campaignFilter, setCampaignFilter] = useState("all");
+  // 캠페인 관리의 "참여 현황" 바로가기 → ?campaign=<id> 로 진입하면 그 캠페인만 필터·펼침.
+  const [campaignFilter, setCampaignFilter] = useState(() => {
+    const p = new URLSearchParams(window.location.search).get("campaign");
+    return p && /^\d+$/.test(p) ? p : "all";
+  });
   const [statusFilter, setStatusFilter] = useState("all");
-  const [expandedCampaigns, setExpandedCampaigns] = useState<Set<number>>(new Set());
+  // 기본은 모두 접힘. 바로가기(?campaign=)로 들어온 캠페인만 처음부터 펼쳐 보여준다.
+  const [expandedCampaigns, setExpandedCampaigns] = useState<Set<number>>(() => {
+    const p = new URLSearchParams(window.location.search).get("campaign");
+    return p && /^\d+$/.test(p) ? new Set([Number(p)]) : new Set();
+  });
 
   // DM unread counts per reviewer (for chat buttons)
   const { data: dmConvs = [] } = trpc.directMessage.conversations.useQuery(undefined, {
@@ -380,7 +388,8 @@ export default function AdminParticipations() {
     });
   }, [data, campaignFilter, statusFilter]);
 
-  // 캠페인별 그룹핑
+  // 캠페인별 그룹핑 — 참여자가 아직 없는 승인(모집중·작업진행) 캠페인도 빈 그룹으로 보여준다.
+  // (익일 진행 배분 캠페인처럼 아직 아무도 참여 못한 캠페인도 여기서 바로 확인)
   const grouped = useMemo(() => {
     const map = new Map<number, { title: string; rows: typeof filtered }>();
     for (const r of filtered) {
@@ -390,8 +399,19 @@ export default function AdminParticipations() {
       }
       map.get(id)!.rows.push(r);
     }
+    // 상태 필터가 없을 때: 참여 0명인 승인 캠페인 추가. 특정 캠페인 필터면 그 캠페인은 상태 무관 표시.
+    if (statusFilter === "all") {
+      for (const c of campaigns ?? []) {
+        if (map.has(c.id)) continue;
+        const isApproved = c.status === "open" || c.status === "in_progress";
+        const isFiltered = campaignFilter !== "all" && String(c.id) === campaignFilter;
+        if ((campaignFilter === "all" && isApproved) || isFiltered) {
+          map.set(c.id, { title: c.title, rows: [] });
+        }
+      }
+    }
     return Array.from(map.entries()).map(([id, v]) => ({ campaignId: id, ...v }));
-  }, [filtered]);
+  }, [filtered, campaigns, campaignFilter, statusFilter]);
 
   /** 캠페인별 참여 리뷰어 엑셀 다운로드 (업체 배송용 — 공용 빌더 사용). */
   const downloadExcel = (group: { campaignId: number; title: string; rows: typeof filtered }) => {
@@ -587,15 +607,21 @@ export default function AdminParticipations() {
 
                 {/* 참여자 목록 — 인증샷은 펼쳤을 때만 지연 로딩 */}
                 {isOpen && (
-                  <CampaignRows
-                    campaignId={group.campaignId}
-                    rows={group.rows}
-                    dmUnreadSet={dmUnreadSet}
-                    act={act}
-                    actPending={setStatusMutation.isPending}
-                    removePending={removeMutation.isPending}
-                    onRemove={setRemoveTarget}
-                  />
+                  group.rows.length === 0 ? (
+                    <p className="border-t border-border/60 px-5 py-6 text-center text-sm text-muted-foreground">
+                      아직 참여한 리뷰어가 없습니다. 리뷰어가 참여하면 여기에 표시됩니다.
+                    </p>
+                  ) : (
+                    <CampaignRows
+                      campaignId={group.campaignId}
+                      rows={group.rows}
+                      dmUnreadSet={dmUnreadSet}
+                      act={act}
+                      actPending={setStatusMutation.isPending}
+                      removePending={removeMutation.isPending}
+                      onRemove={setRemoveTarget}
+                    />
+                  )
                 )}
               </div>
             );

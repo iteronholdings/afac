@@ -353,9 +353,15 @@ export default function AdminCampaigns() {
                         </Button>
                       )}
                     </div>
-                    <Button variant="outline" size="sm" className="bg-card" onClick={() => openEdit(c)}>
-                      <Pencil className="mr-1.5 h-3.5 w-3.5" /> 수정
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" className="flex-1 bg-card" onClick={() => openEdit(c)}>
+                        <Pencil className="mr-1.5 h-3.5 w-3.5" /> 수정
+                      </Button>
+                      <Button variant="outline" size="sm" className="flex-1 bg-card"
+                        onClick={() => navigate(`/admin/participations?campaign=${c.id}`)}>
+                        <ClipboardList className="mr-1.5 h-3.5 w-3.5 text-primary" /> 참여 현황
+                      </Button>
+                    </div>
                   </div>
                   )}
                   <Button
