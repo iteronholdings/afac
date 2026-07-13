@@ -300,6 +300,25 @@ export const participationRouter = router({
     }),
 
   /** Admin: 캠페인 참여자들의 인증샷 (참여현황 목록을 가볍게 유지하기 위한 지연 로딩). */
+  /** 업체(캠페인 소유)·관리자: 리뷰어에게 배정된 리뷰 원고 수정. */
+  updateReviewDraft: protectedProcedure
+    .input(z.object({
+      participationId: z.number().int(),
+      reviewDraft: z.string().trim().min(1, "원고 내용을 입력해 주세요.").max(4000, "원고가 너무 깁니다. (4000자 이내)"),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const p = await db.getParticipationById(input.participationId);
+      if (!p) throw new TRPCError({ code: "NOT_FOUND", message: "참여 내역을 찾을 수 없습니다." });
+      if (ctx.user.role !== "admin") {
+        const campaign = await db.getCampaignById(p.campaignId);
+        if (!campaign || campaign.createdBy !== ctx.user.id) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
+        }
+      }
+      await db.updateParticipation(input.participationId, { reviewDraft: input.reviewDraft });
+      return { success: true as const };
+    }),
+
   proofsByCampaign: adminProcedure
     .input(z.object({ campaignId: z.number().int() }))
     .query(async ({ input }) => db.listProofsByCampaign(input.campaignId)),

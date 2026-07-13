@@ -9,12 +9,14 @@ import {
 } from "@/components/ui/dialog";
 import { downloadDeliveryExcel } from "@/lib/deliveryExcel";
 import { trpc } from "@/lib/trpc";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Building2,
   CalendarDays,
   ChevronDown,
   ChevronRight,
   FileSpreadsheet,
+  FileText,
   FolderArchive,
   ImageIcon,
   Loader2,
@@ -94,6 +96,17 @@ export default function BusinessDashboard() {
   const assignZip = trpc.campaign.assignZipPackets.useMutation({
     onSuccess: (res) => toast.success(`${res.assigned}명에게 가이드 ZIP을 할당했어요! (유닛 ${res.units}개 / 참여 ${res.participants}명)`),
     onError: err => toast.error(err.message),
+  });
+
+  // 리뷰어 배정 원고 보기·수정
+  const [draftEdit, setDraftEdit] = useState<{ pid: number; name: string; draft: string } | null>(null);
+  const saveDraft = trpc.participation.updateReviewDraft.useMutation({
+    onSuccess: () => {
+      utils.campaign.campaignParticipants.invalidate();
+      toast.success("원고를 수정했어요. 리뷰어 화면에 바로 반영됩니다.");
+      setDraftEdit(null);
+    },
+    onError: e => toast.error(e.message),
   });
 
   // 사진 리뷰 ZIP 다시 업로드 (기존 배정 초기화 후 새 사진으로 재배정)
@@ -321,6 +334,7 @@ export default function BusinessDashboard() {
                                 <th className="pb-2 pr-4 text-left font-medium">연락처</th>
                                 <th className="pb-2 pr-4 text-left font-medium">상태</th>
                                 <th className="pb-2 pr-4 text-left font-medium">인증샷</th>
+                                <th className="pb-2 pr-4 text-left font-medium">원고</th>
                                 <th className="pb-2 text-left font-medium">채팅</th>
                               </tr>
                             </thead>
@@ -377,6 +391,17 @@ export default function BusinessDashboard() {
                                       )}
                                     </div>
                                   </td>
+                                  <td className="py-2.5 pr-4">
+                                    {p.reviewDraft ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setDraftEdit({ pid: p.id, name: p.reviewer?.fullName ?? "리뷰어", draft: p.reviewDraft! })}
+                                        className="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-card px-2 py-1 text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
+                                      >
+                                        <FileText className="h-3.5 w-3.5" /> 보기·수정
+                                      </button>
+                                    ) : <span className="text-xs text-muted-foreground">-</span>}
+                                  </td>
                                   <td className="py-2.5">
                                     {p.reviewer?.id ? (
                                       <button
@@ -402,6 +427,25 @@ export default function BusinessDashboard() {
           </div>
         )}
       </div>
+
+      {/* 리뷰어 배정 원고 보기·수정 */}
+      <Dialog open={draftEdit !== null} onOpenChange={o => !o && setDraftEdit(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{draftEdit?.name} 님에게 배정된 리뷰 원고</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={draftEdit?.draft ?? ""}
+            onChange={e => setDraftEdit(v => (v ? { ...v, draft: e.target.value } : v))}
+            className="max-h-[55vh] min-h-56 text-sm leading-relaxed"
+            maxLength={4000}
+          />
+          <Button className="w-full font-bold" disabled={saveDraft.isPending || !draftEdit?.draft.trim()}
+            onClick={() => draftEdit && saveDraft.mutate({ participationId: draftEdit.pid, reviewDraft: draftEdit.draft.trim() })}>
+            {saveDraft.isPending ? "저장 중..." : "원고 저장"}
+          </Button>
+        </DialogContent>
+      </Dialog>
 
       {/* Proof photo lightbox */}
       <Dialog open={!!selectedProof} onOpenChange={o => !o && setSelectedProof(null)}>

@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import {
   formatKRW,
@@ -111,12 +112,20 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
     }
   };
 
-  // 배정된 리뷰 원고 보기 다이얼로그
-  const [draftView, setDraftView] = useState<{ name: string; draft: string } | null>(null);
+  // 배정된 리뷰 원고 보기·수정 다이얼로그
+  const [draftView, setDraftView] = useState<{ pid: number; name: string; draft: string } | null>(null);
   const copyDraft = async (text: string) => {
     try { await navigator.clipboard.writeText(text); toast.success("원고를 복사했어요."); }
     catch { toast.error("복사에 실패했어요."); }
   };
+  const saveDraft = trpc.participation.updateReviewDraft.useMutation({
+    onSuccess: () => {
+      utils.participation.proofsByCampaign.invalidate({ campaignId });
+      toast.success("원고를 수정했어요. 리뷰어 화면에 바로 반영됩니다.");
+      setDraftView(null);
+    },
+    onError: e => toast.error(e.message),
+  });
 
   return (
     <div className="divide-y divide-border/60 border-t border-border/60">
@@ -188,8 +197,8 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
                   )}
                   {pf?.reviewDraft && (
                     <Button size="sm" variant="outline" className="h-7 gap-1 bg-card px-2 text-xs"
-                      onClick={() => setDraftView({ name: r.user?.fullName ?? "리뷰어", draft: pf.reviewDraft! })}>
-                      <FileText className="h-3.5 w-3.5 text-primary" /> 배정 원고 보기
+                      onClick={() => setDraftView({ pid: r.id, name: r.user?.fullName ?? "리뷰어", draft: pf.reviewDraft! })}>
+                      <FileText className="h-3.5 w-3.5 text-primary" /> 배정 원고 보기·수정
                     </Button>
                   )}
                 </div>
@@ -255,19 +264,28 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
         );
       })}
 
-      {/* 배정 원고 보기 */}
+      {/* 배정 원고 보기·수정 */}
       <Dialog open={draftView !== null} onOpenChange={o => !o && setDraftView(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{draftView?.name} 님에게 배정된 리뷰 원고</DialogTitle>
           </DialogHeader>
-          <p className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-sm leading-relaxed text-foreground">
-            {draftView?.draft}
-          </p>
-          <Button variant="outline" className="w-full gap-1.5 bg-card"
-            onClick={() => draftView && copyDraft(draftView.draft)}>
-            <Copy className="h-4 w-4" /> 원고 복사
-          </Button>
+          <Textarea
+            value={draftView?.draft ?? ""}
+            onChange={e => setDraftView(v => (v ? { ...v, draft: e.target.value } : v))}
+            className="max-h-[55vh] min-h-56 text-sm leading-relaxed"
+            maxLength={4000}
+          />
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1 gap-1.5 bg-card"
+              onClick={() => draftView && copyDraft(draftView.draft)}>
+              <Copy className="h-4 w-4" /> 복사
+            </Button>
+            <Button className="flex-1 font-bold" disabled={saveDraft.isPending || !draftView?.draft.trim()}
+              onClick={() => draftView && saveDraft.mutate({ participationId: draftView.pid, reviewDraft: draftView.draft.trim() })}>
+              {saveDraft.isPending ? "저장 중..." : "원고 저장"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
