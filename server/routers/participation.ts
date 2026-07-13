@@ -81,12 +81,12 @@ export const participationRouter = router({
     );
   }),
 
-  /** Reviewer: download their assigned photo-review packet for a participation. */
+  /** 배정된 사진 묶음 다운로드 — 본인(리뷰어) 또는 관리자(검수용). */
   myPacket: protectedProcedure
     .input(z.object({ participationId: z.number().int() }))
     .query(async ({ ctx, input }) => {
       const p = await db.getParticipationById(input.participationId);
-      if (!p || p.userId !== ctx.user.id) {
+      if (!p || (p.userId !== ctx.user.id && ctx.user.role !== "admin")) {
         throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
       }
       const name = p.assignedName ?? "guide.zip";

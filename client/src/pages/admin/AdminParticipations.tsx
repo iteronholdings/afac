@@ -12,6 +12,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -27,7 +33,7 @@ import {
   totalPayout,
 } from "@/lib/workflow";
 import { participationDeadline } from "@shared/const";
-import { CalendarPlus, CheckCircle2, ChevronDown, ChevronRight, Download, FileSpreadsheet, FolderArchive, Inbox, MessageCircle, Phone, Trash2, Upload, Wallet } from "lucide-react";
+import { CalendarPlus, CheckCircle2, ChevronDown, ChevronRight, Copy, Download, FileSpreadsheet, FileText, FolderArchive, Inbox, MessageCircle, Phone, Trash2, Upload, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { downloadDeliveryExcel } from "@/lib/deliveryExcel";
@@ -88,6 +94,30 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
     onError: e => toast.error(e.message),
   });
 
+  // 리뷰어에게 배정된 사진 묶음 다운로드 (검수용) — 같은 탭 이동(첨부 응답이라 페이지 유지)
+  const downloadPacket = async (participationId: number) => {
+    try {
+      const res = await utils.participation.myPacket.fetch({ participationId });
+      if (res.url) { window.location.assign(res.url); toast.success("사진 다운로드를 시작했어요."); return; }
+      if (!res.dataUrl) { toast.error("배정된 사진이 없습니다."); return; }
+      const a = document.createElement("a");
+      a.href = res.dataUrl;
+      a.download = res.name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : "다운로드에 실패했습니다.");
+    }
+  };
+
+  // 배정된 리뷰 원고 보기 다이얼로그
+  const [draftView, setDraftView] = useState<{ name: string; draft: string } | null>(null);
+  const copyDraft = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); toast.success("원고를 복사했어요."); }
+    catch { toast.error("복사에 실패했어요."); }
+  };
+
   return (
     <div className="divide-y divide-border/60 border-t border-border/60">
       {rows.map(r => {
@@ -143,6 +173,25 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
                     onReject={() => setProofReject({ id: r.id, kind: "purchase", label: "구매 인증샷", name: r.user?.fullName ?? "리뷰어" })} />
                   <ProofThumb url={pf?.reviewProofUrl} label="리뷰 인증샷" time={pf?.reviewedAt}
                     onReject={() => setProofReject({ id: r.id, kind: "review", label: "리뷰 인증샷", name: r.user?.fullName ?? "리뷰어" })} />
+                </div>
+              )}
+
+              {/* 이 리뷰어에게 배정된 사진 묶음·리뷰 원고 (검수용) */}
+              {(pf?.assignedName || pf?.reviewDraft) && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {pf?.assignedName && (
+                    <Button size="sm" variant="outline" className="h-7 gap-1 bg-card px-2 text-xs"
+                      onClick={() => downloadPacket(r.id)}>
+                      <FolderArchive className="h-3.5 w-3.5 text-primary" /> 배정 사진 받기
+                      <span className="max-w-32 truncate font-normal text-muted-foreground">({pf.assignedName})</span>
+                    </Button>
+                  )}
+                  {pf?.reviewDraft && (
+                    <Button size="sm" variant="outline" className="h-7 gap-1 bg-card px-2 text-xs"
+                      onClick={() => setDraftView({ name: r.user?.fullName ?? "리뷰어", draft: pf.reviewDraft! })}>
+                      <FileText className="h-3.5 w-3.5 text-primary" /> 배정 원고 보기
+                    </Button>
+                  )}
                 </div>
               )}
             </div>
@@ -205,6 +254,22 @@ function CampaignRows({ campaignId, rows, dmUnreadSet, act, actPending, removePe
           </div>
         );
       })}
+
+      {/* 배정 원고 보기 */}
+      <Dialog open={draftView !== null} onOpenChange={o => !o && setDraftView(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{draftView?.name} 님에게 배정된 리뷰 원고</DialogTitle>
+          </DialogHeader>
+          <p className="max-h-[55vh] overflow-y-auto whitespace-pre-wrap rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-sm leading-relaxed text-foreground">
+            {draftView?.draft}
+          </p>
+          <Button variant="outline" className="w-full gap-1.5 bg-card"
+            onClick={() => draftView && copyDraft(draftView.draft)}>
+            <Copy className="h-4 w-4" /> 원고 복사
+          </Button>
+        </DialogContent>
+      </Dialog>
 
       {/* 인증샷 반려 확인 */}
       <AlertDialog open={proofReject !== null} onOpenChange={o => !o && setProofReject(null)}>

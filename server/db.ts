@@ -816,7 +816,7 @@ export async function listParticipationsLite(opts?: { campaignId?: number }) {
   return db.select(cols).from(participations).orderBy(desc(participations.appliedAt));
 }
 
-/** 특정 캠페인 참여자들의 인증샷만 (참여현황 지연 로딩용). */
+/** 특정 캠페인 참여자들의 인증샷·배정 원고 (참여현황 지연 로딩용). */
 export async function listProofsByCampaign(campaignId: number) {
   const db = await getDb();
   if (!db) return [];
@@ -829,6 +829,9 @@ export async function listProofsByCampaign(campaignId: number) {
     searchedAt: participations.searchedAt,
     purchasedAt: participations.purchasedAt,
     reviewedAt: participations.reviewedAt,
+    // 배정된 리뷰 원고 + 사진 묶음 이름 — 관리자가 리뷰어에게 뭐가 갔는지 확인용.
+    reviewDraft: participations.reviewDraft,
+    assignedName: participations.assignedName,
   }).from(participations).where(eq(participations.campaignId, campaignId));
 }
 
