@@ -210,6 +210,13 @@ export async function assignPacketsForCampaign(
     throw new TRPCError({ code: "BAD_REQUEST", message: "ZIP 안에 배정할 파일이 없습니다." });
   }
 
+  // 유닛 수를 캠페인에 기록 — 참여 배정에서 사진 정원 = min(photoCount, photoUnitCount)로 쓰여
+  // 사진 인분보다 많은 리뷰어가 사진 유형으로 배정되는 것을 막는다.
+  if (campaign.photoUnitCount !== units.length) {
+    await db.updateCampaign(campaign.id, { photoUnitCount: units.length })
+      .catch(e => console.error("[photoUnitCount] 저장 실패:", e));
+  }
+
   const parts = (await db.listParticipationsByCampaign(campaign.id))
     .filter(p => p.status !== "rejected" && (p.reviewType === "photo" || p.reviewType == null))
     .sort((a, b) => new Date(a.appliedAt).getTime() - new Date(b.appliedAt).getTime());

@@ -93,6 +93,7 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE participations ADD COLUMN deadlineAt TIMESTAMP NULL`,
     sql`ALTER TABLE campaigns ADD COLUMN invoiceExcel LONGTEXT`,
     sql`ALTER TABLE campaigns ADD COLUMN invoiceExcelName VARCHAR(255)`,
+    sql`ALTER TABLE campaigns ADD COLUMN photoUnitCount INT NULL`,
   ];
   for (const stmt of alterStatements) {
     try {

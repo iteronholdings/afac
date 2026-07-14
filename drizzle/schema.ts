@@ -105,6 +105,12 @@ export const campaigns = mysqlTable("campaigns", {
   photoGuideZip: longtext("photoGuideZip"),
   /** 사진 리뷰 ZIP 원본 파일명. */
   photoGuideZipName: varchar("photoGuideZipName", { length: 255 }),
+  /**
+   * 업로드된 ZIP 안의 '리뷰어 1인분' 유닛 수 (ZIP 분석 시 자동 저장).
+   * 참여 배정 시 사진 리뷰 정원 = min(photoCount, photoUnitCount) — 사진 인분보다 많은
+   * 인원이 사진 유형으로 배정돼 패킷 없이 붕 뜨는 것을 방지. null이면 아직 미분석.
+   */
+  photoUnitCount: int("photoUnitCount"),
   /** 관리자가 송장번호를 채워 올린 배송 엑셀 (base64 data URL). */
   invoiceExcel: longtext("invoiceExcel"),
   /** 업로드된 배송 엑셀 파일명. */
