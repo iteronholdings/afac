@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   businessMessages,
   campaignDrafts,
+  campaignInvoiceExcels,
   campaigns,
   consultingRequests,
   depositRequests,
@@ -11,6 +12,7 @@ import {
   InsertBusinessMessage,
   InsertCampaign,
   InsertCampaignDraft,
+  InsertCampaignInvoiceExcel,
   InsertConsultingRequest,
   InsertDepositRequest,
   InsertDirectMessage,
@@ -248,6 +250,21 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     `);
   } catch (e) {
     console.warn("[Migration] business_messages table:", e);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS campaign_invoice_excels (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        campaignId INT NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        dataUrl LONGTEXT NOT NULL,
+        uploadedBy INT,
+        createdAt TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+  } catch (e) {
+    console.warn("[Migration] campaign_invoice_excels table:", e);
   }
 
   // Assign memberCode to existing members that don't have one yet
@@ -851,18 +868,35 @@ export async function listCampaignsLite() {
   }).from(campaigns);
 }
 
-/** 캠페인에 업로드된 배송 엑셀 (base64 data URL + 파일명). 없으면 null. */
-export async function getInvoiceExcel(campaignId: number) {
+// === 캠페인 송장 엑셀 업로드 이력 (누적 보관) ===
+
+/** 송장 엑셀 업로드 1건 추가 — 덮어쓰지 않고 누적한다. */
+export async function addInvoiceExcel(data: InsertCampaignInvoiceExcel) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(campaignInvoiceExcels).values(data);
+}
+
+/** 캠페인의 송장 엑셀 업로드 목록 (파일 내용 제외 — 목록 표시용, 최신순). */
+export async function listInvoiceExcels(campaignId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: campaignInvoiceExcels.id,
+    name: campaignInvoiceExcels.name,
+    createdAt: campaignInvoiceExcels.createdAt,
+  }).from(campaignInvoiceExcels)
+    .where(eq(campaignInvoiceExcels.campaignId, campaignId))
+    .orderBy(desc(campaignInvoiceExcels.createdAt));
+}
+
+/** 업로드된 송장 엑셀 1건 (파일 내용 포함). */
+export async function getInvoiceExcelById(id: number) {
   const db = await getDb();
   if (!db) return null;
-  const rows = await db
-    .select({ invoiceExcel: campaigns.invoiceExcel, invoiceExcelName: campaigns.invoiceExcelName })
-    .from(campaigns)
-    .where(eq(campaigns.id, campaignId))
-    .limit(1);
-  const row = rows[0];
-  if (!row?.invoiceExcel) return null;
-  return { dataUrl: row.invoiceExcel, name: row.invoiceExcelName ?? "invoice.xlsx" };
+  const rows = await db.select().from(campaignInvoiceExcels)
+    .where(eq(campaignInvoiceExcels.id, id)).limit(1);
+  return rows[0] ?? null;
 }
 
 /** All participations (admin view), optionally filtered by campaign and/or status. */

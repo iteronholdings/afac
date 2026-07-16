@@ -413,23 +413,28 @@ export default function AdminParticipations() {
     return Array.from(map.entries()).map(([id, v]) => ({ campaignId: id, ...v }));
   }, [filtered, campaigns, campaignFilter, statusFilter]);
 
-  /** 캠페인별 참여 리뷰어 엑셀 다운로드 (업체 배송용 — 공용 빌더 사용). */
-  const downloadExcel = (group: { campaignId: number; title: string; rows: typeof filtered }) => {
-    const active = group.rows.filter(r => r.status !== "rejected");
-    downloadDeliveryExcel(group.title, active.map(r => ({
-      name: r.user?.fullName ?? "-",
-      productTitle: r.campaign?.title ?? group.title,
-      productPrice: r.campaign?.productPrice ?? 0,
-      phone: r.user?.phone ?? "-",
-      address: r.user?.address ?? "-",
-    })));
+  /** 캠페인별 참여 리뷰어 엑셀 다운로드 — 클릭 시점에 서버에서 최신 명단을 다시 받아 생성. */
+  const downloadExcel = async (group: { campaignId: number; title: string }) => {
+    try {
+      const freshAll = await utils.participation.listAll.fetch();
+      const active = (freshAll ?? []).filter(r => r.campaignId === group.campaignId && r.status !== "rejected");
+      downloadDeliveryExcel(group.title, active.map(r => ({
+        name: r.user?.fullName ?? "-",
+        productTitle: r.campaign?.title ?? group.title,
+        productPrice: r.campaign?.productPrice ?? 0,
+        phone: r.user?.phone ?? "-",
+        address: r.user?.address ?? "-",
+      })));
+    } catch {
+      toast.error("최신 명단을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+    }
   };
 
-  // 송장 채운 엑셀 업로드/다운로드 (수동)
+  // 송장 채운 엑셀 업로드 — 덮어쓰지 않고 이력으로 누적 (날짜별 목록에서 각각 다운로드)
   const uploadInvoice = trpc.campaign.uploadInvoiceExcel.useMutation({
-    onSuccess: () => {
-      utils.participation.listAll.invalidate();
-      toast.success("송장 엑셀을 업로드했어요.");
+    onSuccess: (_d, vars) => {
+      utils.campaign.listInvoiceExcels.invalidate({ campaignId: vars.campaignId });
+      toast.success("송장 엑셀을 업로드했어요. '업로드 목록'에서 확인할 수 있어요.");
     },
     onError: e => toast.error(e.message),
   });
@@ -440,9 +445,11 @@ export default function AdminParticipations() {
     reader.onerror = () => toast.error("파일을 읽지 못했어요.");
     reader.readAsDataURL(file);
   };
-  const downloadUploadedInvoice = async (campaignId: number) => {
-    const res = await utils.campaign.getInvoiceExcel.fetch({ campaignId });
-    if (!res) { toast.error("업로드된 엑셀이 없어요."); return; }
+  // 업로드 이력 목록 다이얼로그 (캠페인 단위)
+  const [invoiceListFor, setInvoiceListFor] = useState<{ campaignId: number; title: string } | null>(null);
+  const downloadUploadedInvoice = async (id: number) => {
+    const res = await utils.campaign.getInvoiceExcel.fetch({ id });
+    if (!res) { toast.error("파일을 찾을 수 없어요."); return; }
     const a = document.createElement("a");
     a.href = res.dataUrl;
     a.download = res.name;
@@ -585,11 +592,10 @@ export default function AdminParticipations() {
                     onClick={() => document.getElementById(`invoice-upload-${group.campaignId}`)?.click()}>
                     <Upload className="mr-1.5 h-3.5 w-3.5 text-primary" /> 엑셀 업로드
                   </Button>
-                  {group.rows[0]?.campaign?.invoiceExcelName && (
-                    <Button size="sm" variant="ghost" className="shrink-0" onClick={() => downloadUploadedInvoice(group.campaignId)}>
-                      <Download className="mr-1.5 h-3.5 w-3.5" /> 업로드본
-                    </Button>
-                  )}
+                  <Button size="sm" variant="ghost" className="shrink-0"
+                    onClick={() => setInvoiceListFor({ campaignId: group.campaignId, title: group.title })}>
+                    <Download className="mr-1.5 h-3.5 w-3.5" /> 업로드 목록
+                  </Button>
                   {/* 사진 유실 복구: 새 ZIP 업로드 → 배정 초기화 후 재배정 */}
                   <input
                     id={`photozip-admin-${group.campaignId}`}
@@ -629,6 +635,9 @@ export default function AdminParticipations() {
         </div>
       )}
 
+      {/* 송장 엑셀 업로드 이력 목록 */}
+      <InvoiceListDialog target={invoiceListFor} onClose={() => setInvoiceListFor(null)} onDownload={downloadUploadedInvoice} />
+
       {/* 참여 삭제 확인 */}
       <AlertDialog open={removeTarget !== null} onOpenChange={o => !o && setRemoveTarget(null)}>
         <AlertDialogContent>
@@ -656,5 +665,56 @@ export default function AdminParticipations() {
         </AlertDialogContent>
       </AlertDialog>
     </AdminLayout>
+  );
+}
+
+/** 캠페인의 송장 엑셀 업로드 이력 — 날짜·파일명 목록에서 각각 다운로드. */
+function InvoiceListDialog({
+  target,
+  onClose,
+  onDownload,
+}: {
+  target: { campaignId: number; title: string } | null;
+  onClose: () => void;
+  onDownload: (id: number) => void;
+}) {
+  const { data: files, isLoading } = trpc.campaign.listInvoiceExcels.useQuery(
+    { campaignId: target?.campaignId ?? 0 },
+    { enabled: target !== null },
+  );
+  return (
+    <Dialog open={target !== null} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="truncate">송장 엑셀 업로드 목록</DialogTitle>
+        </DialogHeader>
+        <p className="-mt-2 truncate text-sm text-muted-foreground">{target?.title}</p>
+        {isLoading ? (
+          <div className="space-y-2">
+            {[0, 1].map(i => <div key={i} className="h-12 animate-pulse rounded-xl bg-muted" />)}
+          </div>
+        ) : !files || files.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+            아직 업로드된 송장 엑셀이 없습니다.<br />"엑셀 업로드" 버튼으로 올리면 여기에 쌓여요.
+          </p>
+        ) : (
+          <div className="max-h-[50vh] space-y-2 overflow-y-auto">
+            {files.map(f => (
+              <div key={f.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-card px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">{f.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(f.createdAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} 업로드
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" className="shrink-0 bg-card" onClick={() => onDownload(f.id)}>
+                  <Download className="mr-1.5 h-3.5 w-3.5" /> 다운로드
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -228,6 +228,26 @@ export type Message = typeof messages.$inferSelect;
 export type InsertMessage = typeof messages.$inferInsert;
 
 /**
+ * 캠페인별 송장 엑셀 업로드 이력 (누적).
+ * 며칠에 나눠 진행하며 여러 번 업로드해도 덮어쓰지 않고 전부 보관 —
+ * 관리자 참여현황에서 날짜별로 목록을 보고 각각 내려받는다.
+ */
+export const campaignInvoiceExcels = mysqlTable("campaign_invoice_excels", {
+  id: int("id").autoincrement().primaryKey(),
+  campaignId: int("campaignId").notNull(),
+  /** 업로드한 파일명. */
+  name: varchar("name", { length: 255 }).notNull(),
+  /** xlsx base64 data URL. */
+  dataUrl: longtext("dataUrl").notNull(),
+  /** 업로드한 관리자 user.id. */
+  uploadedBy: int("uploadedBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type CampaignInvoiceExcel = typeof campaignInvoiceExcels.$inferSelect;
+export type InsertCampaignInvoiceExcel = typeof campaignInvoiceExcels.$inferInsert;
+
+/**
  * Direct messages between a reviewer and the platform (운영팀).
  * Conversations are scoped to the reviewer's userId (reviewerId).
  * Admin can see all conversations; reviewer can only see their own.

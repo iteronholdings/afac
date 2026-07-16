@@ -231,15 +231,21 @@ export default function BusinessDashboard() {
                           variant="outline"
                           className="gap-1.5 rounded-full bg-card"
                           disabled={loadingParts}
-                          onClick={() => {
-                            const active = (participants ?? []).filter(p => p.status !== "rejected");
-                            downloadDeliveryExcel(c.title, active.map(p => ({
-                              name: p.reviewer?.fullName ?? "-",
-                              productTitle: c.title,
-                              productPrice: c.productPrice,
-                              phone: p.reviewer?.phone ?? "-",
-                              address: p.reviewer?.address ?? "-",
-                            })));
+                          onClick={async () => {
+                            // 클릭 시점에 최신 명단을 서버에서 다시 받아 생성 (화면 캐시 X)
+                            try {
+                              const fresh = await utils.campaign.campaignParticipants.fetch({ campaignId: c.id });
+                              const active = (fresh ?? []).filter(p => p.status !== "rejected");
+                              downloadDeliveryExcel(c.title, active.map(p => ({
+                                name: p.reviewer?.fullName ?? "-",
+                                productTitle: c.title,
+                                productPrice: c.productPrice,
+                                phone: p.reviewer?.phone ?? "-",
+                                address: p.reviewer?.address ?? "-",
+                              })));
+                            } catch {
+                              toast.error("최신 명단을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.");
+                            }
                           }}
                         >
                           <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> 엑셀 다운로드

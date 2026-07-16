@@ -664,25 +664,37 @@ export const campaignRouter = router({
       return withUser;
     }),
 
-  /** Admin: 송장번호를 채운 배송 엑셀을 캠페인에 업로드(저장). base64 data URL로 보관. */
+  /** Admin: 송장번호를 채운 배송 엑셀을 캠페인에 업로드. 덮어쓰지 않고 이력으로 누적 보관. */
   uploadInvoiceExcel: adminProcedure
     .input(z.object({
       campaignId: z.number().int(),
       dataUrl: z.string().min(1).max(20_000_000), // xlsx base64 data URL (수백 행도 수백 KB)
       filename: z.string().trim().max(255),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const campaign = await db.getCampaignById(input.campaignId);
       if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
-      await db.updateCampaign(input.campaignId, {
-        invoiceExcel: input.dataUrl,
-        invoiceExcelName: input.filename || "송장.xlsx",
+      await db.addInvoiceExcel({
+        campaignId: input.campaignId,
+        name: input.filename || "송장.xlsx",
+        dataUrl: input.dataUrl,
+        uploadedBy: ctx.user.id,
       });
       return { success: true as const };
     }),
 
-  /** Admin: 캠페인에 업로드된 배송 엑셀 다운로드 (base64 data URL + 파일명). 없으면 null. */
-  getInvoiceExcel: adminProcedure
+  /** Admin: 캠페인의 송장 엑셀 업로드 이력 (날짜·파일명, 최신순 — 내용 제외). */
+  listInvoiceExcels: adminProcedure
     .input(z.object({ campaignId: z.number().int() }))
-    .query(async ({ input }) => db.getInvoiceExcel(input.campaignId)),
+    .query(async ({ input }) => db.listInvoiceExcels(input.campaignId)),
+
+  /** Admin: 캠페인에 업로드된 배송 엑셀 다운로드 (base64 data URL + 파일명). 없으면 null. */
+  /** Admin: 업로드 이력에서 송장 엑셀 1건 다운로드 (내용 포함). */
+  getInvoiceExcel: adminProcedure
+    .input(z.object({ id: z.number().int() }))
+    .query(async ({ input }) => {
+      const row = await db.getInvoiceExcelById(input.id);
+      if (!row) return null;
+      return { name: row.name, dataUrl: row.dataUrl };
+    }),
 });
