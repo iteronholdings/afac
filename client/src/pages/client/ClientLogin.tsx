@@ -1,38 +1,60 @@
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import {
+  clearAutoLogin,
+  clearLoginId,
+  hasAutoLogin,
+  loadAutoLogin,
+  loadLoginId,
+  saveAutoLogin,
+  saveLoginId,
+} from "@/lib/autoLogin";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
 import { Loader2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Link, useLocation } from "wouter";
 
 export default function ClientLogin() {
   const [, navigate] = useLocation();
   const utils = trpc.useUtils();
-  const [loginId, setLoginId] = useState("");
+  const [loginId, setLoginId] = useState(() => loadLoginId());
   const [password, setPassword] = useState("");
+  const [rememberId, setRememberId] = useState(() => !!loadLoginId());
+  const [autoLogin, setAutoLogin] = useState(() => hasAutoLogin("client"));
+  const [autoTrying, setAutoTrying] = useState(() => hasAutoLogin("client"));
+  const autoAttempted = useRef(false);
 
   const logoutMutation = trpc.auth.logout.useMutation();
 
   const loginMutation = trpc.auth.login.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (_d, vars) => {
       const me = await utils.auth.me.fetch();
       // 업체 전용 포털 — 리뷰어 계정은 거부하고 리뷰어 포털로 안내.
       if (me?.role === "user") {
         await logoutMutation.mutateAsync();
         await utils.auth.me.invalidate();
+        clearAutoLogin();
+        setAutoTrying(false);
         toast.error("리뷰어 계정입니다. 리뷰어 포털(/afreviewer/login)에서 로그인해 주세요.");
         return;
       }
+      if (rememberId) saveLoginId(vars.loginId); else clearLoginId();
+      if (autoLogin) saveAutoLogin("client", vars.loginId, vars.password);
+      else clearAutoLogin();
       toast.success("로그인되었습니다.");
-      if (me?.role === "admin") {
-        navigate("/admin");
-      } else {
-        navigate("/client/dashboard");
-      }
+      navigate(me?.role === "admin" ? "/admin" : "/client/dashboard");
     },
     onError: (error: unknown) => {
+      if (autoAttempted.current && autoTrying) {
+        clearAutoLogin();
+        setAutoTrying(false);
+        setAutoLogin(false);
+        toast.error("자동 로그인에 실패했어요. 다시 로그인해 주세요.");
+        return;
+      }
       const message =
         error instanceof TRPCClientError
           ? error.message
@@ -40,6 +62,28 @@ export default function ClientLogin() {
       toast.error(message);
     },
   });
+
+  // 이미 로그인돼 있으면 포털 홈으로, 아니면 저장된 자동 로그인 1회 시도.
+  const { data: me, isLoading: meLoading } = trpc.auth.me.useQuery();
+  useEffect(() => {
+    if (meLoading) return;
+    if (me) {
+      if (me.role === "user") return; // 리뷰어는 이 포털 대상 아님 — 폼 유지
+      navigate(me.role === "admin" ? "/admin" : "/client/dashboard");
+      return;
+    }
+    if (!autoAttempted.current) {
+      const saved = loadAutoLogin("client");
+      if (saved) {
+        autoAttempted.current = true;
+        setLoginId(saved.loginId);
+        loginMutation.mutate(saved);
+      } else {
+        setAutoTrying(false);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meLoading, me]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,6 +93,15 @@ export default function ClientLogin() {
     }
     loginMutation.mutate({ loginId: loginId.trim(), password });
   };
+
+  if (autoTrying && (meLoading || loginMutation.isPending || !!me)) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-gray-50">
+        <Loader2 className="h-7 w-7 animate-spin text-primary" />
+        <p className="text-sm font-medium text-muted-foreground">자동 로그인 중이에요…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
@@ -76,6 +129,18 @@ export default function ClientLogin() {
             onChange={e => setPassword(e.target.value)}
             className="h-11"
           />
+
+          {/* 아이디 저장 · 자동 로그인 */}
+          <div className="flex items-center gap-5">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+              <Checkbox checked={rememberId} onCheckedChange={v => setRememberId(v === true)} />
+              아이디 저장
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+              <Checkbox checked={autoLogin} onCheckedChange={v => setAutoLogin(v === true)} />
+              자동 로그인
+            </label>
+          </div>
 
           <Button
             type="submit"
