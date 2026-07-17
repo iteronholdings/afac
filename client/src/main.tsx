@@ -75,6 +75,13 @@ const trpcClient = trpc.createClient({
   ],
 });
 
+// PWA(앱 설치) 지원 — 서비스워커를 접속 시 항상 등록한다. (푸시 구독과 같은 /sw.js 재사용)
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => { /* 미지원 브라우저 무시 */ });
+  });
+}
+
 createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
