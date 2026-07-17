@@ -69,7 +69,7 @@ async function startServer() {
   });
   // 안드로이드 앱(TWA) 도메인 소유 증명 — 플레이스토어 앱이 주소창 없이 afac.kr을 열 수 있게 한다.
   // 지문(SHA-256)은 앱 서명 키에서 추출한 공개 정보라 코드에 둬도 안전.
-  const ANDROID_APP_CERT_SHA256 = "3F:88:A9:1F:8A:E3:B0:C3:C4:29:1B:9A:10:6E:B4:B4:5D:53:75:F2:5D:19:52:79:B1:53:E1:D5:9E:6E:C0:98";
+  const ANDROID_APP_CERT_SHA256 = "DD:A1:28:0E:57:AB:F7:6A:94:76:47:00:BF:C0:30:E4:A2:1F:C9:4D:6D:6A:C7:DC:A8:68:33:62:A0:1B:DA:05";
   app.get("/.well-known/assetlinks.json", (_req, res) => {
     res.json([
       {
