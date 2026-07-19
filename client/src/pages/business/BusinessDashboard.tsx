@@ -50,6 +50,19 @@ const REVIEW_TYPE_LABEL: Record<string, string> = {
   text: "📝 글자",
   star: "⭐ 별점",
 };
+
+/** 팀장 검수 결과 배지. */
+const QC_BADGE: Record<string, { label: string; cls: string }> = {
+  pass: { label: "🛡️ 팀장 검수 통과", cls: "bg-emerald-50 text-emerald-700" },
+  fixed: { label: "🛡️ 팀장 검수 · 정리됨", cls: "bg-emerald-50 text-emerald-700" },
+  regenerated: { label: "🛡️ 팀장 검수 · 재작성", cls: "bg-emerald-50 text-emerald-700" },
+  flagged: { label: "⚠️ 팀장 검수 · 확인 필요", cls: "bg-amber-50 text-amber-700" },
+};
+function QcBadge({ qc }: { qc?: string | null }) {
+  const b = qc ? QC_BADGE[qc] : null;
+  if (!b) return null;
+  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${b.cls}`}>{b.label}</span>;
+}
 const PARTICIPATION_STATUS_LABEL: Record<string, string> = {
   applied: "신청",
   searched: "검색완료",
@@ -99,11 +112,15 @@ export default function BusinessDashboard() {
   });
 
   // 리뷰어 배정 원고 보기·수정
-  const [draftEdit, setDraftEdit] = useState<{ pid: number; name: string; draft: string } | null>(null);
+  const [draftEdit, setDraftEdit] = useState<{ pid: number; name: string; draft: string; qc?: string | null } | null>(null);
   const saveDraft = trpc.participation.updateReviewDraft.useMutation({
-    onSuccess: () => {
+    onSuccess: (res) => {
       utils.campaign.campaignParticipants.invalidate();
-      toast.success("원고를 수정했어요. 리뷰어 화면에 바로 반영됩니다.");
+      if (res.warnings && res.warnings.length > 0) {
+        toast.warning(`팀장 검수: ${res.warnings.join(", ")} — 확인해 주세요.`);
+      } else {
+        toast.success("원고를 수정했어요. 팀장 검수 통과 · 리뷰어 화면에 바로 반영됩니다.");
+      }
       setDraftEdit(null);
     },
     onError: e => toast.error(e.message),
@@ -401,7 +418,7 @@ export default function BusinessDashboard() {
                                     {p.reviewDraft ? (
                                       <button
                                         type="button"
-                                        onClick={() => setDraftEdit({ pid: p.id, name: p.reviewer?.fullName ?? "리뷰어", draft: p.reviewDraft! })}
+                                        onClick={() => setDraftEdit({ pid: p.id, name: p.reviewer?.fullName ?? "리뷰어", draft: p.reviewDraft!, qc: p.reviewDraftQc })}
                                         className="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-card px-2 py-1 text-xs font-medium text-primary hover:bg-primary/5 transition-colors"
                                       >
                                         <FileText className="h-3.5 w-3.5" /> 보기·수정
@@ -438,7 +455,10 @@ export default function BusinessDashboard() {
       <Dialog open={draftEdit !== null} onOpenChange={o => !o && setDraftEdit(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{draftEdit?.name} 님에게 배정된 리뷰 원고</DialogTitle>
+            <DialogTitle className="flex flex-wrap items-center gap-2">
+              {draftEdit?.name} 님에게 배정된 리뷰 원고
+              <QcBadge qc={draftEdit?.qc} />
+            </DialogTitle>
           </DialogHeader>
           <Textarea
             value={draftEdit?.draft ?? ""}

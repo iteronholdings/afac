@@ -193,6 +193,8 @@ export const participations = mysqlTable("participations", {
 
   /** 자동 생성된 리뷰 원고 초안 (사진·글자 리뷰어용). 리뷰어가 참고/복사해 작성. */
   reviewDraft: text("reviewDraft"),
+  /** 팀장 검수 결과: pass(통과) · fixed(정리) · regenerated(재생성) · flagged(경고). null=미검수(구). */
+  reviewDraftQc: varchar("reviewDraftQc", { length: 20 }),
 
   /** 배분 진행 캠페인에서 이 리뷰어에게 자동 배정된 진행 날짜 ('YYYY-MM-DD'). */
   assignedDate: varchar("assignedDate", { length: 20 }),

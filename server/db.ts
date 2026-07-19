@@ -84,6 +84,7 @@ async function runMigrations(db: ReturnType<typeof drizzle>) {
     sql`ALTER TABLE deposit_requests ADD COLUMN vbankDue VARCHAR(40)`,
     sql`ALTER TABLE deposit_requests ADD COLUMN paidAt TIMESTAMP NULL`,
     sql`ALTER TABLE participations ADD COLUMN reviewDraft TEXT`,
+    sql`ALTER TABLE participations ADD COLUMN reviewDraftQc VARCHAR(20)`,
     sql`ALTER TABLE participations ADD COLUMN assignedDate VARCHAR(20)`,
     sql`ALTER TABLE users ADD COLUMN customReviewFee INT NULL`,
     sql`ALTER TABLE users ADD COLUMN taxBizNumber VARCHAR(20)`,
@@ -849,6 +850,7 @@ export async function listProofsByCampaign(campaignId: number) {
     reviewedAt: participations.reviewedAt,
     // 배정된 리뷰 원고 + 사진 묶음 이름 — 관리자가 리뷰어에게 뭐가 갔는지 확인용.
     reviewDraft: participations.reviewDraft,
+    reviewDraftQc: participations.reviewDraftQc,
     assignedName: participations.assignedName,
   }).from(participations).where(eq(participations.campaignId, campaignId));
 }

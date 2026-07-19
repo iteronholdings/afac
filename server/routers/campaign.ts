@@ -10,7 +10,7 @@ import {
   storageGetSignedPutUrl,
   storagePut,
 } from "../storage";
-import { generateReviewDraft } from "../reviewDraft";
+import { superviseGeneratedDraft } from "../reviewSupervisor";
 import { distributeTodayStatus } from "../schedule";
 
 /** 카톡 단톡방 공지 문구 — 캠페인 승인 시 리뷰어 단톡방에 게시할 메시지. */
@@ -234,10 +234,13 @@ export async function assignPacketsForCampaign(
     const unit = freeUnits[i];
     const bytes = await unit.bytes();
     const assignedName = unit.name;
-    // 패킷 배정 시 리뷰 원고가 없으면 함께 생성(사진형). join 누락분 backfill.
+    // 패킷 배정 시 리뷰 원고가 없으면 함께 생성(사진형, 팀장 검수 통과분). join 누락분 backfill.
     const draftPatch = part.reviewDraft
       ? {}
-      : { reviewDraft: generateReviewDraft({ type: "photo", title: campaign.title, keyword: campaign.keyword }) };
+      : (() => {
+          const qc = superviseGeneratedDraft({ type: "photo", title: campaign.title, keyword: campaign.keyword });
+          return { reviewDraft: qc.text, reviewDraftQc: qc.verdict };
+        })();
     if (useR2) {
       const { key } = await storagePut(`review-packets/${campaign.id}/${assignedName}`, bytes, "application/zip");
       await db.updateParticipation(part.id, { assignedPacket: `r2:${key}`, assignedName, ...draftPatch });

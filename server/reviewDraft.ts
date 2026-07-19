@@ -25,7 +25,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 /** 캠페인 키워드/제목에서 자연스러운 상품 호칭을 뽑는다. */
-function productNoun(keyword?: string | null, title?: string | null): string {
+export function productNoun(keyword?: string | null, title?: string | null): string {
   const k = (keyword || "").trim();
   if (k && k.length <= 12) return k;
   const t = (title || "").trim();
@@ -71,7 +71,7 @@ function makeFill(noun: string) {
 }
 
 // ── 상품 카테고리 감지 ────────────────────────────────────────
-type Category =
+export type Category =
   | "food" | "health" | "fashion" | "beauty" | "electronics"
   | "home" | "baby" | "pet" | "default";
 
@@ -89,7 +89,7 @@ const CATEGORY_KEYWORDS: [Category, string[]][] = [
 ];
 
 /** 키워드/제목으로 상품 카테고리를 감지한다. (못 찾으면 default) */
-function detectCategory(keyword?: string | null, title?: string | null): Category {
+export function detectCategory(keyword?: string | null, title?: string | null): Category {
   const hay = `${keyword ?? ""} ${title ?? ""}`;
   for (const [cat, words] of CATEGORY_KEYWORDS) {
     if (words.some(w => hay.includes(w))) return cat;

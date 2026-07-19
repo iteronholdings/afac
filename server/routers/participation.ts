@@ -6,7 +6,7 @@ import { storageExists } from "../storage";
 import * as db from "../db";
 import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
 import { assignPacketsForCampaign } from "./campaign";
-import { generateReviewDraft } from "../reviewDraft";
+import { superviseGeneratedDraft, superviseManualDraft } from "../reviewSupervisor";
 import { distributeTodayStatus } from "../schedule";
 
 /**
@@ -41,8 +41,10 @@ async function tryAssignReviewDraft(participationId: number, reviewType: string 
     const campaign = await db.getCampaignById(campaignId);
     if (!campaign) return;
     const type = reviewType === "photo" ? "photo" : "text";
-    const draft = generateReviewDraft({ type, title: campaign.title, keyword: campaign.keyword });
-    await db.updateParticipation(participationId, { reviewDraft: draft });
+    // 팀장 검수를 통과한 원고만 배정한다.
+    const qc = superviseGeneratedDraft({ type, title: campaign.title, keyword: campaign.keyword });
+    if (qc.verdict === "flagged") console.warn(`[팀장검수] p${participationId} 경고:`, qc.warnings);
+    await db.updateParticipation(participationId, { reviewDraft: qc.text, reviewDraftQc: qc.verdict });
   } catch (e) {
     console.error("[review draft] skipped:", e);
   }
@@ -314,14 +316,20 @@ export const participationRouter = router({
     .mutation(async ({ ctx, input }) => {
       const p = await db.getParticipationById(input.participationId);
       if (!p) throw new TRPCError({ code: "NOT_FOUND", message: "참여 내역을 찾을 수 없습니다." });
+      const campaign = await db.getCampaignById(p.campaignId);
       if (ctx.user.role !== "admin") {
-        const campaign = await db.getCampaignById(p.campaignId);
         if (!campaign || campaign.createdBy !== ctx.user.id) {
           throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
         }
       }
-      await db.updateParticipation(input.participationId, { reviewDraft: input.reviewDraft });
-      return { success: true as const };
+      // 사람이 직접 쓴 원고도 팀장 검수를 거친다 — 이모지·특수문자는 정리하고, 위험 표현은 경고.
+      const qc = superviseManualDraft(input.reviewDraft, {
+        type: p.reviewType === "photo" ? "photo" : "text",
+        title: campaign?.title,
+        keyword: campaign?.keyword,
+      });
+      await db.updateParticipation(input.participationId, { reviewDraft: qc.text, reviewDraftQc: qc.verdict });
+      return { success: true as const, verdict: qc.verdict, warnings: qc.warnings };
     }),
 
   proofsByCampaign: adminProcedure
