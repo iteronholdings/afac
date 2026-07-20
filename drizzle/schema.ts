@@ -93,6 +93,12 @@ export const campaigns = mysqlTable("campaigns", {
   photoCount: int("photoCount").notNull().default(0),
   /** 글자 리뷰 모집 인원. */
   textCount: int("textCount").notNull().default(0),
+  /**
+   * 리뷰 원고 목표 글자 수 ("n자 내외"). null이면 기본 길이로 생성.
+   * 원고 생성이 이 길이에 맞춰지고, 리뷰어 화면에도 작성 분량 안내로 표시된다.
+   */
+  photoDraftChars: int("photoDraftChars"),
+  textDraftChars: int("textDraftChars"),
   /** 별점 리뷰 모집 인원. */
   starCount: int("starCount").notNull().default(0),
   /** 캠페인 시작일 (YYYY-MM-DD). */

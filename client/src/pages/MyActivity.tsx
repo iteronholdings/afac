@@ -302,8 +302,16 @@ export default function MyActivity() {
                   {p.reviewDraft && !["approved", "paid", "rejected"].includes(status) && (
                     <div className="border-t border-border/60 bg-primary/5 px-5 py-4">
                       <div className="mb-2 flex items-center justify-between gap-2">
-                        <span className="flex items-center gap-1.5 text-sm font-bold text-primary">
+                        <span className="flex flex-wrap items-center gap-1.5 text-sm font-bold text-primary">
                           <Sparkles className="h-4 w-4" /> 추천 리뷰 원고
+                          {(() => {
+                            const target = p.reviewType === "photo" ? c?.photoDraftChars : c?.textDraftChars;
+                            return target ? (
+                              <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold text-primary-foreground">
+                                {target}자 내외
+                              </span>
+                            ) : null;
+                          })()}
                         </span>
                         <Button size="sm" variant="outline" className="h-7 gap-1 bg-card px-2 text-xs"
                           onClick={() => copyDraft(p.reviewDraft!)}>
@@ -314,7 +322,12 @@ export default function MyActivity() {
                         {p.reviewDraft}
                       </p>
                       <p className="mt-1.5 text-[11px] text-muted-foreground">
-                        참고용 초안이에요. 본인 말투로 자연스럽게 다듬어 작성하면 더 좋아요 🐻
+                        {(() => {
+                          const target = p.reviewType === "photo" ? c?.photoDraftChars : c?.textDraftChars;
+                          return target
+                            ? `상세페이지를 참고해 ${target}자 내외로 작성해 주세요. 위 원고를 본인 말투로 다듬으면 딱 맞아요 🐻`
+                            : "참고용 초안이에요. 본인 말투로 자연스럽게 다듬어 작성하면 더 좋아요 🐻";
+                        })()}
                       </p>
                     </div>
                   )}

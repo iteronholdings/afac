@@ -47,6 +47,8 @@ type WizardData = {
   photoCount: string;
   textCount: string;
   starCount: string;
+  photoDraftChars: string;
+  textDraftChars: string;
   photoZip: string;
   photoZipName: string;
   photoZipKey: string; // R2 직접 업로드 키 (있으면 base64 대신 사용)
@@ -70,6 +72,8 @@ const INIT: WizardData = {
   photoCount: "0",
   textCount: "0",
   starCount: "0",
+  photoDraftChars: "",
+  textDraftChars: "",
   photoZip: "",
   photoZipName: "",
   photoZipKey: "",
@@ -488,6 +492,8 @@ export default function CampaignWizard() {
       photoCount: Number(data.photoCount) || 0,
       textCount: Number(data.textCount) || 0,
       starCount: Number(data.starCount) || 0,
+      photoDraftChars: Number(data.photoDraftChars) || null,
+      textDraftChars: Number(data.textDraftChars) || null,
       startDate: data.startDate || undefined,
       endDate: endDate || undefined,
       schedule: data.distributeMode === "distribute" ? JSON.stringify(
@@ -651,6 +657,27 @@ export default function CampaignWizard() {
                       <span className="font-semibold text-primary">합계 모집 인원</span>
                       <span className="font-extrabold text-primary">{totalReviewers}명</span>
                     </div>
+                  </div>
+
+                  {/* 리뷰 원고 분량 ("n자 내외") */}
+                  <div>
+                    <Label className="mb-2 block font-semibold">
+                      리뷰 원고 분량 <span className="text-xs font-normal text-muted-foreground">(선택 — 비우면 기본 길이)</span>
+                    </Label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {([["photoDraftChars", "📷 사진 리뷰", "예: 400"], ["textDraftChars", "📝 글자 리뷰", "예: 150"]] as const).map(([k, label, ph]) => (
+                        <div key={k} className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">{label}</Label>
+                          <div className="relative">
+                            <Input type="number" min={0} max={3000} placeholder={ph} value={data[k]} onChange={set(k)} className="h-11 pr-16 text-center" />
+                            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">자 내외</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      지정하면 리뷰어에게 배정되는 <b className="text-foreground">추천 원고가 그 분량에 맞춰</b> 생성되고, 리뷰어 화면에도 "{"{n}"}자 내외로 작성" 안내가 표시됩니다.
+                    </p>
                   </div>
 
                   {/* 사진 리뷰 안내 + 예시 */}

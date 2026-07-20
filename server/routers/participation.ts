@@ -41,8 +41,13 @@ async function tryAssignReviewDraft(participationId: number, reviewType: string 
     const campaign = await db.getCampaignById(campaignId);
     if (!campaign) return;
     const type = reviewType === "photo" ? "photo" : "text";
-    // 팀장 검수를 통과한 원고만 배정한다.
-    const qc = superviseGeneratedDraft({ type, title: campaign.title, keyword: campaign.keyword });
+    // 팀장 검수를 통과한 원고만 배정한다. (캠페인이 "n자 내외"를 정했으면 그 분량으로)
+    const qc = superviseGeneratedDraft({
+      type,
+      title: campaign.title,
+      keyword: campaign.keyword,
+      targetChars: type === "photo" ? campaign.photoDraftChars : campaign.textDraftChars,
+    });
     if (qc.verdict === "flagged") console.warn(`[팀장검수] p${participationId} 경고:`, qc.warnings);
     await db.updateParticipation(participationId, { reviewDraft: qc.text, reviewDraftQc: qc.verdict });
   } catch (e) {

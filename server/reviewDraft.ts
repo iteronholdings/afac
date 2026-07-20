@@ -578,23 +578,71 @@ function composePhoto(persona: Persona, cat: Category): string[] {
 }
 
 /**
+ * 목표 분량("n자 내외")에 맞춘 조립.
+ * 우선순위(사진 언급·품질 > 활용 > 배송·배경 > 마무리)로 예산 안에서 고른 뒤,
+ * 실제 리뷰의 자연스러운 순서로 재배열한다 — 짧은 분량에서도 핵심이 빠지지 않는다.
+ */
+function composeTargeted(persona: Persona, cat: Category, type: DraftType, target: number): string[] {
+  const opener = pick(persona.openers);
+  const closer = pick(persona.closers);
+  let used = opener.length + closer.length + 2;
+
+  const cons = cat === "food" ? [...CONS_CHUNKS, ...CONS_FOOD_EXTRA] : CONS_CHUNKS;
+  // 사진 리뷰는 사진 언급이 필요해 항상 장문 청크를, 짧은 글자 리뷰는 단문 풀을 쓴다.
+  const longMode = type === "photo" || target >= 220;
+
+  type Sec = { text: string; order: number; prio: number };
+  const cands: Sec[] = [];
+  if (longMode) {
+    if (type === "photo") cands.push({ text: pick(PHOTO_FIRST), order: 3, prio: 1 });
+    shuffle(PHOTO_QUALITY[cat]).forEach((t, i) => cands.push({ text: t, order: 4 + i * 0.01, prio: 2 + i * 0.1 }));
+    shuffle(PHOTO_USAGE[cat]).forEach((t, i) => cands.push({ text: t, order: 5 + i * 0.01, prio: 3.5 + i * 0.1 }));
+    cands.push({ text: pick(DELIVERY_CHUNKS), order: 2, prio: 5 });
+    cands.push({ text: pick(BG_EXTRA), order: 1, prio: 6 });
+    cands.push({ text: pick(TRUST_CHUNKS), order: 6, prio: 7 });
+    cands.push({ text: pick(STORY_CHUNKS), order: 7, prio: 8 });
+    cands.push({ text: pick(cons), order: 8, prio: 9 });
+    cands.push({ text: pick(AFTER_CHUNKS), order: 9, prio: 10 });
+    cands.push({ text: pick(CLOSING_EXTRA), order: 10, prio: 11 });
+  } else {
+    shuffle([...CATEGORY_BODIES[cat], ...COMMON_BODIES]).forEach((t, i) =>
+      cands.push({ text: t, order: 1 + i * 0.01, prio: 1 + i * 0.1 }));
+  }
+
+  const chosen: Sec[] = [];
+  for (const c of [...cands].sort((a, b) => a.prio - b.prio)) {
+    if (used >= target * 0.95) break;               // 목표에 근접하면 중단
+    if (used + c.text.length + 1 > target * 1.15) continue; // 과도한 초과는 건너뜀
+    chosen.push(c);
+    used += c.text.length + 1;
+  }
+  chosen.sort((a, b) => a.order - b.order);         // 자연스러운 리뷰 순서로 복원
+  return [opener, ...chosen.map(c => c.text), closer];
+}
+
+/**
  * 한 편의 리뷰 원고를 생성한다.
- *  - 사진 리뷰어: 7단 구성 장문 (~700~900자) — 항상 최장.
- *  - 글자 리뷰어: 장문(2~3문장) 3 : 단문(1~2문장) 7 혼합 (~40~110자).
+ *  - targetChars가 있으면 그 분량("n자 내외")에 맞춰 조립한다.
+ *  - 없으면 기본: 사진 리뷰어는 변주 장문, 글자 리뷰어는 단문/장문 혼합.
  * 이모지는 사용하지 않는다.
  */
 export function generateReviewDraft(opts: {
   type: DraftType;
   title?: string | null;
   keyword?: string | null;
+  /** 목표 글자 수("n자 내외"). null/미지정이면 기본 길이. */
+  targetChars?: number | null;
 }): string {
   const noun = productNoun(opts.keyword, opts.title);
   const fill = makeFill(noun);
   const persona = pick(PERSONAS);
   const cat = detectCategory(opts.keyword, opts.title);
+  const target = opts.targetChars && opts.targetChars > 0 ? opts.targetChars : null;
 
   let parts: string[];
-  if (opts.type === "photo") {
+  if (target) {
+    parts = composeTargeted(persona, cat, opts.type, target);
+  } else if (opts.type === "photo") {
     parts = composePhoto(persona, cat);
   } else {
     const long = Math.random() < LONG_FORM_RATIO;

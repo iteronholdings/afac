@@ -80,6 +80,9 @@ const campaignInput = z.object({
   photoCount: z.number().int().min(0).max(10000).optional(),
   textCount: z.number().int().min(0).max(10000).optional(),
   starCount: z.number().int().min(0).max(10000).optional(),
+  // 리뷰 원고 목표 분량("n자 내외"). 0/미지정이면 기본 길이.
+  photoDraftChars: z.number().int().min(0).max(3000).nullable().optional(),
+  textDraftChars: z.number().int().min(0).max(3000).nullable().optional(),
   startDate: z.string().trim().max(20).optional(),
   endDate: z.string().trim().max(20).optional(),
   schedule: z.string().max(2000).optional(),
@@ -238,7 +241,12 @@ export async function assignPacketsForCampaign(
     const draftPatch = part.reviewDraft
       ? {}
       : (() => {
-          const qc = superviseGeneratedDraft({ type: "photo", title: campaign.title, keyword: campaign.keyword });
+          const qc = superviseGeneratedDraft({
+            type: "photo",
+            title: campaign.title,
+            keyword: campaign.keyword,
+            targetChars: campaign.photoDraftChars,
+          });
           return { reviewDraft: qc.text, reviewDraftQc: qc.verdict };
         })();
     if (useR2) {

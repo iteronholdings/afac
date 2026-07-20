@@ -27,7 +27,19 @@ export type QcResult = {
   warnings: string[];
 };
 
-type Ctx = { type: "photo" | "text"; title?: string | null; keyword?: string | null };
+type Ctx = {
+  type: "photo" | "text";
+  title?: string | null;
+  keyword?: string | null;
+  /** 캠페인이 지정한 목표 분량("n자 내외"). 있으면 이 범위를 지키는지 검수한다. */
+  targetChars?: number | null;
+};
+
+/** 목표 분량 허용 범위 — ±20%(최소 ±40자). "내외"의 실무 기준. */
+export function draftCharRange(target: number): { min: number; max: number } {
+  const tol = Math.max(40, Math.round(target * 0.2));
+  return { min: target - tol, max: target + tol };
+}
 
 // 이모지(그림문자) 매칭 — u 플래그 없이(서로게이트 쌍 + BMP 기호 범위).
 // 아스트랄 영역 문자는 한국어 리뷰에선 사실상 이모지뿐이라 쌍 전체를 대상으로 둔다.
@@ -77,8 +89,14 @@ function hardIssues(text: string, ctx: Ctx): string[] {
   if ((cat === "food" || cat === "health") && MEDICAL_RE.test(text)) issues.push("치료·효능 단정 표현(표시광고 리스크)");
 
   const len = text.length;
-  if (ctx.type === "photo" && (len < 250 || len > 1400)) issues.push(`사진 원고 길이 이상(${len}자)`);
-  if (ctx.type === "text" && (len < 15 || len > 260)) issues.push(`글자 원고 길이 이상(${len}자)`);
+  if (ctx.targetChars && ctx.targetChars > 0) {
+    // 캠페인이 "n자 내외"를 지정한 경우 — 그 범위를 지켰는지만 본다.
+    const { min, max } = draftCharRange(ctx.targetChars);
+    if (len < min || len > max) issues.push(`목표 분량(${ctx.targetChars}자 내외) 벗어남(${len}자)`);
+  } else {
+    if (ctx.type === "photo" && (len < 250 || len > 1400)) issues.push(`사진 원고 길이 이상(${len}자)`);
+    if (ctx.type === "text" && (len < 15 || len > 260)) issues.push(`글자 원고 길이 이상(${len}자)`);
+  }
   return issues;
 }
 
@@ -103,7 +121,9 @@ export function superviseGeneratedDraft(ctx: Ctx): QcResult {
 
   for (let attempt = 0; attempt < 6; attempt++) {
     if (attempt > 0) regenerated = true;
-    const raw = generateReviewDraft({ type: ctx.type, title: ctx.title, keyword: ctx.keyword });
+    const raw = generateReviewDraft({
+      type: ctx.type, title: ctx.title, keyword: ctx.keyword, targetChars: ctx.targetChars,
+    });
     const fixed = applyCosmeticFixes(raw);
     const issues = hardIssues(fixed.text, ctx);
     const cand = { text: fixed.text, issues, cosmetic: fixed.changed };
