@@ -15,6 +15,7 @@ import {
   CalendarDays,
   ChevronDown,
   ChevronRight,
+  Download,
   FileSpreadsheet,
   FileText,
   FolderArchive,
@@ -23,6 +24,7 @@ import {
   MessageCircle,
   PackagePlus,
   Search,
+  Upload,
   Users,
 } from "lucide-react";
 import { useState } from "react";
@@ -125,6 +127,32 @@ export default function BusinessDashboard() {
     },
     onError: e => toast.error(e.message),
   });
+
+  // 송장 채운 엑셀 업로드 — 덮어쓰지 않고 회차별로 누적 (업로드 목록에서 각각 다운로드)
+  const uploadInvoice = trpc.campaign.uploadInvoiceExcel.useMutation({
+    onSuccess: (_d, vars) => {
+      utils.campaign.listInvoiceExcels.invalidate({ campaignId: vars.campaignId });
+      toast.success("송장 엑셀을 업로드했어요. '업로드 목록'에서 확인할 수 있어요.");
+    },
+    onError: e => toast.error(e.message),
+  });
+  const onPickInvoice = (campaignId: number, file: File) => {
+    if (!/\.xlsx?$/i.test(file.name)) { toast.error("엑셀 파일(.xlsx)만 업로드할 수 있어요."); return; }
+    const reader = new FileReader();
+    reader.onload = () => uploadInvoice.mutate({ campaignId, dataUrl: String(reader.result), filename: file.name });
+    reader.onerror = () => toast.error("파일을 읽지 못했어요.");
+    reader.readAsDataURL(file);
+  };
+  // 업로드 이력 목록 다이얼로그
+  const [invoiceListFor, setInvoiceListFor] = useState<{ campaignId: number; title: string } | null>(null);
+  const downloadUploadedInvoice = async (id: number) => {
+    const res = await utils.campaign.getInvoiceExcel.fetch({ id });
+    if (!res) { toast.error("파일을 찾을 수 없어요."); return; }
+    const a = document.createElement("a");
+    a.href = res.dataUrl;
+    a.download = res.name;
+    a.click();
+  };
 
   // 사진 리뷰 ZIP 다시 업로드 (기존 배정 초기화 후 새 사진으로 재배정)
   const [reuploadingId, setReuploadingId] = useState<number | null>(null);
@@ -266,6 +294,32 @@ export default function BusinessDashboard() {
                           }}
                         >
                           <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> 엑셀 다운로드
+                        </Button>
+
+                        {/* 송장 채운 엑셀 업로드 (회차별 누적) */}
+                        <input
+                          id={`invoice-upload-biz-${c.id}`}
+                          type="file"
+                          accept=".xlsx,.xls"
+                          className="hidden"
+                          onChange={e => { const f = e.target.files?.[0]; if (f) onPickInvoice(c.id, f); e.target.value = ""; }}
+                        />
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 rounded-full bg-card"
+                          disabled={uploadInvoice.isPending}
+                          onClick={() => document.getElementById(`invoice-upload-biz-${c.id}`)?.click()}
+                        >
+                          <Upload className="h-3.5 w-3.5 text-primary" /> 송장 엑셀 업로드
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 rounded-full bg-card"
+                          onClick={() => setInvoiceListFor({ campaignId: c.id, title: c.title })}
+                        >
+                          <Download className="h-3.5 w-3.5" /> 업로드 목록
                         </Button>
                         {c.hasPhotoGuideZip && (
                           <Button
@@ -451,6 +505,9 @@ export default function BusinessDashboard() {
         )}
       </div>
 
+      {/* 송장 엑셀 업로드 이력 목록 */}
+      <InvoiceListDialog target={invoiceListFor} onClose={() => setInvoiceListFor(null)} onDownload={downloadUploadedInvoice} />
+
       {/* 리뷰어 배정 원고 보기·수정 */}
       <Dialog open={draftEdit !== null} onOpenChange={o => !o && setDraftEdit(null)}>
         <DialogContent className="max-w-lg">
@@ -492,5 +549,56 @@ export default function BusinessDashboard() {
         partnerName={chatWith?.name ?? ""}
       />
     </ClientLayout>
+  );
+}
+
+/** 캠페인의 송장 엑셀 업로드 이력 — 날짜·파일명 목록에서 각각 다운로드. */
+function InvoiceListDialog({
+  target,
+  onClose,
+  onDownload,
+}: {
+  target: { campaignId: number; title: string } | null;
+  onClose: () => void;
+  onDownload: (id: number) => void;
+}) {
+  const { data: files, isLoading } = trpc.campaign.listInvoiceExcels.useQuery(
+    { campaignId: target?.campaignId ?? 0 },
+    { enabled: target !== null },
+  );
+  return (
+    <Dialog open={target !== null} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="truncate">송장 엑셀 업로드 목록</DialogTitle>
+        </DialogHeader>
+        <p className="-mt-2 truncate text-sm text-muted-foreground">{target?.title}</p>
+        {isLoading ? (
+          <div className="space-y-2">
+            {[0, 1].map(i => <div key={i} className="h-12 animate-pulse rounded-xl bg-muted" />)}
+          </div>
+        ) : !files || files.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+            아직 업로드된 송장 엑셀이 없습니다.<br />"송장 엑셀 업로드" 버튼으로 올리면 여기에 쌓여요.
+          </p>
+        ) : (
+          <div className="max-h-[50vh] space-y-2 overflow-y-auto">
+            {files.map(f => (
+              <div key={f.id} className="flex items-center justify-between gap-2 rounded-xl border border-border/70 bg-card px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-foreground">{f.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {new Date(f.createdAt).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} 업로드
+                  </p>
+                </div>
+                <Button size="sm" variant="outline" className="shrink-0 bg-card" onClick={() => onDownload(f.id)}>
+                  <Download className="mr-1.5 h-3.5 w-3.5" /> 다운로드
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

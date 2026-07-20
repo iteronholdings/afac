@@ -667,8 +667,11 @@ export const campaignRouter = router({
       return withUser;
     }),
 
-  /** Admin: 송장번호를 채운 배송 엑셀을 캠페인에 업로드. 덮어쓰지 않고 이력으로 누적 보관. */
-  uploadInvoiceExcel: adminProcedure
+  /**
+   * 업체(캠페인 소유)·관리자: 송장번호를 채운 배송 엑셀을 캠페인에 업로드.
+   * 덮어쓰지 않고 이력으로 누적 보관 — 며칠에 나눠 진행해도 회차별로 남는다.
+   */
+  uploadInvoiceExcel: businessProcedure
     .input(z.object({
       campaignId: z.number().int(),
       dataUrl: z.string().min(1).max(20_000_000), // xlsx base64 data URL (수백 행도 수백 KB)
@@ -677,6 +680,9 @@ export const campaignRouter = router({
     .mutation(async ({ ctx, input }) => {
       const campaign = await db.getCampaignById(input.campaignId);
       if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
+      if (ctx.user.role !== "admin" && campaign.createdBy !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
+      }
       await db.addInvoiceExcel({
         campaignId: input.campaignId,
         name: input.filename || "송장.xlsx",
@@ -686,18 +692,28 @@ export const campaignRouter = router({
       return { success: true as const };
     }),
 
-  /** Admin: 캠페인의 송장 엑셀 업로드 이력 (날짜·파일명, 최신순 — 내용 제외). */
-  listInvoiceExcels: adminProcedure
+  /** 업체(소유)·관리자: 캠페인의 송장 엑셀 업로드 이력 (날짜·파일명, 최신순 — 내용 제외). */
+  listInvoiceExcels: businessProcedure
     .input(z.object({ campaignId: z.number().int() }))
-    .query(async ({ input }) => db.listInvoiceExcels(input.campaignId)),
+    .query(async ({ ctx, input }) => {
+      const campaign = await db.getCampaignById(input.campaignId);
+      if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
+      if (ctx.user.role !== "admin" && campaign.createdBy !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
+      }
+      return db.listInvoiceExcels(input.campaignId);
+    }),
 
-  /** Admin: 캠페인에 업로드된 배송 엑셀 다운로드 (base64 data URL + 파일명). 없으면 null. */
-  /** Admin: 업로드 이력에서 송장 엑셀 1건 다운로드 (내용 포함). */
-  getInvoiceExcel: adminProcedure
+  /** 업체(소유)·관리자: 업로드 이력에서 송장 엑셀 1건 다운로드 (내용 포함). */
+  getInvoiceExcel: businessProcedure
     .input(z.object({ id: z.number().int() }))
-    .query(async ({ input }) => {
+    .query(async ({ ctx, input }) => {
       const row = await db.getInvoiceExcelById(input.id);
       if (!row) return null;
+      const campaign = await db.getCampaignById(row.campaignId);
+      if (ctx.user.role !== "admin" && campaign?.createdBy !== ctx.user.id) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
+      }
       return { name: row.name, dataUrl: row.dataUrl };
     }),
 });
