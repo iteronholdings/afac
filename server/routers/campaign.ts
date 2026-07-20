@@ -668,10 +668,10 @@ export const campaignRouter = router({
     }),
 
   /**
-   * 업체(캠페인 소유)·관리자: 송장번호를 채운 배송 엑셀을 캠페인에 업로드.
+   * 관리자 전용: 송장번호를 채운 배송 엑셀을 캠페인에 업로드. (업로드는 운영팀 몫 — 업체는 조회만)
    * 덮어쓰지 않고 이력으로 누적 보관 — 며칠에 나눠 진행해도 회차별로 남는다.
    */
-  uploadInvoiceExcel: businessProcedure
+  uploadInvoiceExcel: adminProcedure
     .input(z.object({
       campaignId: z.number().int(),
       dataUrl: z.string().min(1).max(20_000_000), // xlsx base64 data URL (수백 행도 수백 KB)
@@ -680,9 +680,6 @@ export const campaignRouter = router({
     .mutation(async ({ ctx, input }) => {
       const campaign = await db.getCampaignById(input.campaignId);
       if (!campaign) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
-      if (ctx.user.role !== "admin" && campaign.createdBy !== ctx.user.id) {
-        throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
-      }
       await db.addInvoiceExcel({
         campaignId: input.campaignId,
         name: input.filename || "송장.xlsx",

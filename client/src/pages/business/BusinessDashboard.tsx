@@ -24,7 +24,6 @@ import {
   MessageCircle,
   PackagePlus,
   Search,
-  Upload,
   Users,
 } from "lucide-react";
 import { useState } from "react";
@@ -128,22 +127,7 @@ export default function BusinessDashboard() {
     onError: e => toast.error(e.message),
   });
 
-  // 송장 채운 엑셀 업로드 — 덮어쓰지 않고 회차별로 누적 (업로드 목록에서 각각 다운로드)
-  const uploadInvoice = trpc.campaign.uploadInvoiceExcel.useMutation({
-    onSuccess: (_d, vars) => {
-      utils.campaign.listInvoiceExcels.invalidate({ campaignId: vars.campaignId });
-      toast.success("송장 엑셀을 업로드했어요. '업로드 목록'에서 확인할 수 있어요.");
-    },
-    onError: e => toast.error(e.message),
-  });
-  const onPickInvoice = (campaignId: number, file: File) => {
-    if (!/\.xlsx?$/i.test(file.name)) { toast.error("엑셀 파일(.xlsx)만 업로드할 수 있어요."); return; }
-    const reader = new FileReader();
-    reader.onload = () => uploadInvoice.mutate({ campaignId, dataUrl: String(reader.result), filename: file.name });
-    reader.onerror = () => toast.error("파일을 읽지 못했어요.");
-    reader.readAsDataURL(file);
-  };
-  // 업로드 이력 목록 다이얼로그
+  // 운영팀이 올린 송장 엑셀 목록·다운로드 (업로드는 관리자 전용 — 업체는 조회만)
   const [invoiceListFor, setInvoiceListFor] = useState<{ campaignId: number; title: string } | null>(null);
   const downloadUploadedInvoice = async (id: number) => {
     const res = await utils.campaign.getInvoiceExcel.fetch({ id });
@@ -296,30 +280,14 @@ export default function BusinessDashboard() {
                           <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> 엑셀 다운로드
                         </Button>
 
-                        {/* 송장 채운 엑셀 업로드 (회차별 누적) */}
-                        <input
-                          id={`invoice-upload-biz-${c.id}`}
-                          type="file"
-                          accept=".xlsx,.xls"
-                          className="hidden"
-                          onChange={e => { const f = e.target.files?.[0]; if (f) onPickInvoice(c.id, f); e.target.value = ""; }}
-                        />
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1.5 rounded-full bg-card"
-                          disabled={uploadInvoice.isPending}
-                          onClick={() => document.getElementById(`invoice-upload-biz-${c.id}`)?.click()}
-                        >
-                          <Upload className="h-3.5 w-3.5 text-primary" /> 송장 엑셀 업로드
-                        </Button>
+                        {/* 운영팀이 올린 송장 엑셀 조회·다운로드 (업로드는 운영팀 전용) */}
                         <Button
                           size="sm"
                           variant="outline"
                           className="gap-1.5 rounded-full bg-card"
                           onClick={() => setInvoiceListFor({ campaignId: c.id, title: c.title })}
                         >
-                          <Download className="h-3.5 w-3.5" /> 업로드 목록
+                          <Download className="h-3.5 w-3.5" /> 송장 엑셀 목록
                         </Button>
                         {c.hasPhotoGuideZip && (
                           <Button
@@ -570,7 +538,7 @@ function InvoiceListDialog({
     <Dialog open={target !== null} onOpenChange={o => !o && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="truncate">송장 엑셀 업로드 목록</DialogTitle>
+          <DialogTitle className="truncate">송장 엑셀 목록</DialogTitle>
         </DialogHeader>
         <p className="-mt-2 truncate text-sm text-muted-foreground">{target?.title}</p>
         {isLoading ? (
@@ -579,7 +547,7 @@ function InvoiceListDialog({
           </div>
         ) : !files || files.length === 0 ? (
           <p className="rounded-xl border border-dashed border-border bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
-            아직 업로드된 송장 엑셀이 없습니다.<br />"송장 엑셀 업로드" 버튼으로 올리면 여기에 쌓여요.
+            아직 등록된 송장 엑셀이 없습니다.<br />운영팀이 송장을 올리면 회차별로 여기에 표시됩니다.
           </p>
         ) : (
           <div className="max-h-[50vh] space-y-2 overflow-y-auto">
