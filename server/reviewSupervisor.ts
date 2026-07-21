@@ -35,6 +35,21 @@ type Ctx = {
   targetChars?: number | null;
 };
 
+/**
+ * 목표 분량("n자 내외")의 실제 허용 상한 — 규칙 기반 생성기가 어떤 상품 카테고리에서도
+ * 자연스럽게(문장 반복 없이) 채울 수 있는 한계. 전 카테고리 검증 기준(뷰티·펫·베이비 포함):
+ *   사진 최대 700자 / 글자 최대 400자. 이보다 큰 목표는 이 값으로 낮춰 적용한다
+ *   (안 그러면 목표를 못 채워 항상 flagged가 됨). 너무 짧은 값은 50자로 올린다.
+ */
+const TARGET_MIN = 50;
+const TARGET_MAX: Record<"photo" | "text", number> = { photo: 700, text: 400 };
+
+/** 지정된 목표 분량을 달성 가능한 범위로 정규화. null/0이면 null(기본 길이). */
+export function clampTargetChars(type: "photo" | "text", target?: number | null): number | null {
+  if (!target || target <= 0) return null;
+  return Math.min(Math.max(target, TARGET_MIN), TARGET_MAX[type]);
+}
+
 /** 목표 분량 허용 범위 — ±20%(최소 ±40자). "내외"의 실무 기준. */
 export function draftCharRange(target: number): { min: number; max: number } {
   const tol = Math.max(40, Math.round(target * 0.2));
@@ -115,7 +130,9 @@ function softNotes(text: string, ctx: Ctx): string[] {
  * 자동 생성 원고 검수: 생성 → 미용 정리 → 하드 위반 시 재생성(최대 6회) → 가장 깨끗한 원고 채택.
  * 팀장 검수를 반드시 통과한 원고만 반환한다.
  */
-export function superviseGeneratedDraft(ctx: Ctx): QcResult {
+export function superviseGeneratedDraft(rawCtx: Ctx): QcResult {
+  // 목표 분량을 달성 가능 범위로 정규화 — 생성·검수가 같은 값을 쓰게 해 불달성 flagged를 없앤다.
+  const ctx: Ctx = { ...rawCtx, targetChars: clampTargetChars(rawCtx.type, rawCtx.targetChars) };
   let best: { text: string; issues: string[]; cosmetic: boolean } | null = null;
   let regenerated = false;
 
@@ -145,11 +162,12 @@ export function superviseGeneratedDraft(ctx: Ctx): QcResult {
  * 사람이 직접 쓴 원고(업체·관리자 수정) 검수: 미용 정리만 적용하고,
  * 하드 위반(위험 표현)은 경고로 알린다. 사람 의도는 존중해 재작성하지 않는다.
  */
-export function superviseManualDraft(text: string, ctx: Ctx): QcResult {
+export function superviseManualDraft(text: string, rawCtx: Ctx): QcResult {
+  const ctx: Ctx = { ...rawCtx, targetChars: clampTargetChars(rawCtx.type, rawCtx.targetChars) };
   const fixed = applyCosmeticFixes(text);
   const hard = hardIssues(fixed.text, ctx).filter(
-    // 사람이 일부러 쓴 길이·키워드는 경고에서 제외(위험 표현만 경고).
-    i => i.includes("재배자") || i.includes("치료") || i.includes("템플릿"),
+    // 사람이 직접 쓴 원고는 강제 재작성하지 않고 경고만: 위험 표현 + 목표 분량 이탈.
+    i => i.includes("재배자") || i.includes("치료") || i.includes("템플릿") || i.includes("목표 분량"),
   );
   const soft = softNotes(fixed.text, ctx);
   const warnings = [...hard, ...soft];

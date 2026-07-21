@@ -81,8 +81,9 @@ const campaignInput = z.object({
   textCount: z.number().int().min(0).max(10000).optional(),
   starCount: z.number().int().min(0).max(10000).optional(),
   // 리뷰 원고 목표 분량("n자 내외"). 0/미지정이면 기본 길이.
-  photoDraftChars: z.number().int().min(0).max(3000).nullable().optional(),
-  textDraftChars: z.number().int().min(0).max(3000).nullable().optional(),
+  // 상한은 규칙 기반 생성기가 어떤 상품에서도 자연스럽게 채울 수 있는 한계(사진 700·글자 400).
+  photoDraftChars: z.number().int().min(0).max(700).nullable().optional(),
+  textDraftChars: z.number().int().min(0).max(400).nullable().optional(),
   startDate: z.string().trim().max(20).optional(),
   endDate: z.string().trim().max(20).optional(),
   schedule: z.string().max(2000).optional(),

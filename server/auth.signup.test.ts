@@ -35,6 +35,19 @@ vi.mock("./db", () => ({
     return row;
   },
   touchLastSignedIn: async () => {},
+  // 이후 세션에서 추가된 가입 게이트용 목: 탈퇴 전화번호·전화 인증 확인.
+  hasWithdrawnUserWithPhone: async () => false,
+  getPhoneVerification: async () => null,
+}));
+
+// 문자 인증 비활성(테스트 환경) + 세션 토큰 스텁으로 가입·로그인 경로를 단위 검증.
+vi.mock("./sms", () => ({
+  isSmsConfigured: () => false,
+  normalizePhone: (p: string) => p,
+  sendSms: async () => ({}),
+}));
+vi.mock("./_core/sdk", () => ({
+  sdk: { createSessionToken: async () => "test-session-token" },
 }));
 
 // Import after mocks are registered.

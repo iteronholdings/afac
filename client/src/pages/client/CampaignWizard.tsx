@@ -344,7 +344,7 @@ export default function CampaignWizard() {
     const onPaste = (e: ClipboardEvent) => {
       const items = e.clipboardData?.items;
       if (!items) return;
-      for (const it of items) {
+      for (const it of Array.from(items)) {
         if (it.type.startsWith("image/")) {
           const f = it.getAsFile();
           if (f) {
@@ -665,18 +665,18 @@ export default function CampaignWizard() {
                       리뷰 원고 분량 <span className="text-xs font-normal text-muted-foreground">(선택 — 비우면 기본 길이)</span>
                     </Label>
                     <div className="grid grid-cols-2 gap-3">
-                      {([["photoDraftChars", "📷 사진 리뷰", "예: 400"], ["textDraftChars", "📝 글자 리뷰", "예: 150"]] as const).map(([k, label, ph]) => (
+                      {([["photoDraftChars", "📷 사진 리뷰", "예: 400", 700], ["textDraftChars", "📝 글자 리뷰", "예: 150", 400]] as const).map(([k, label, ph, maxChars]) => (
                         <div key={k} className="space-y-1.5">
                           <Label className="text-xs text-muted-foreground">{label}</Label>
                           <div className="relative">
-                            <Input type="number" min={0} max={3000} placeholder={ph} value={data[k]} onChange={set(k)} className="h-11 pr-16 text-center" />
+                            <Input type="number" min={0} max={maxChars} placeholder={ph} value={data[k]} onChange={set(k)} className="h-11 pr-16 text-center" />
                             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">자 내외</span>
                           </div>
                         </div>
                       ))}
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">
-                      지정하면 리뷰어에게 배정되는 <b className="text-foreground">추천 원고가 그 분량에 맞춰</b> 생성되고, 리뷰어 화면에도 "{"{n}"}자 내외로 작성" 안내가 표시됩니다.
+                      지정하면 리뷰어에게 배정되는 <b className="text-foreground">추천 원고가 그 분량에 맞춰</b> 생성되고, 리뷰어 화면에도 "{"{n}"}자 내외로 작성" 안내가 표시됩니다. <span className="text-muted-foreground/80">(사진 최대 700자 · 글자 최대 400자)</span>
                     </p>
                   </div>
 

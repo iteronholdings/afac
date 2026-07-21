@@ -327,11 +327,14 @@ export const participationRouter = router({
           throw new TRPCError({ code: "FORBIDDEN", message: "접근 권한이 없습니다." });
         }
       }
-      // 사람이 직접 쓴 원고도 팀장 검수를 거친다 — 이모지·특수문자는 정리하고, 위험 표현은 경고.
+      // 사람이 직접 쓴 원고도 팀장 검수를 거친다 — 이모지·특수문자는 정리하고,
+      // 위험 표현·목표 분량(캠페인이 "n자 내외" 지정 시) 이탈은 경고.
+      const type = p.reviewType === "photo" ? "photo" : "text";
       const qc = superviseManualDraft(input.reviewDraft, {
-        type: p.reviewType === "photo" ? "photo" : "text",
+        type,
         title: campaign?.title,
         keyword: campaign?.keyword,
+        targetChars: type === "photo" ? campaign?.photoDraftChars : campaign?.textDraftChars,
       });
       await db.updateParticipation(input.participationId, { reviewDraft: qc.text, reviewDraftQc: qc.verdict });
       return { success: true as const, verdict: qc.verdict, warnings: qc.warnings };

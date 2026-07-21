@@ -44,6 +44,8 @@ type User = {
   name: string | null;
   phone: string;
   role: "user" | "admin";
+  reviewerAgreedAt?: Date | null;
+  address?: string | null;
 };
 
 const campaigns = new Map<number, Campaign>();
@@ -124,6 +126,9 @@ vi.mock("./db", () => ({
     const all = [...participations.values()];
     return opts?.campaignId ? all.filter(p => p.campaignId === opts.campaignId) : all;
   },
+  listParticipationsByCampaign: async (campaignId: number) =>
+    [...participations.values()].filter(p => p.campaignId === campaignId),
+  countCampaignParticipantsByPhone: async () => 0,
   getUserById: async (id: number) => users.get(id),
   listAllUsers: async () => [...users.values()],
   setUserRole: async (id: number, role: "user" | "admin") => {
@@ -151,7 +156,7 @@ function makeCtx(user: Partial<User> | null): TrpcContext {
 
 const adminUser = { id: 1, openId: "owner-open-id", loginId: "admin_iteron", role: "admin" as const };
 const otherAdmin = { id: 2, openId: "local_admin2", loginId: "admin2", role: "admin" as const };
-const reviewer = { id: 10, openId: "local_reviewer", loginId: "reviewer", role: "user" as const };
+const reviewer = { id: 10, openId: "local_reviewer", loginId: "reviewer", role: "user" as const, reviewerAgreedAt: new Date() };
 
 beforeEach(() => {
   campaigns.clear();
@@ -161,7 +166,9 @@ beforeEach(() => {
   partSeq = 1;
   users.set(1, { id: 1, openId: "owner-open-id", loginId: "admin_iteron", fullName: "오너", name: "오너", phone: "010", role: "admin" });
   users.set(2, { id: 2, openId: "local_admin2", loginId: "admin2", fullName: "관리자2", name: "관리자2", phone: "010", role: "admin" });
-  users.set(10, { id: 10, openId: "local_reviewer", loginId: "reviewer", fullName: "리뷰어", name: "리뷰어", phone: "010", role: "user" });
+  const addr = "(12345) 서울 테스트로 1 (테스트빌딩), 101호";
+  users.set(10, { id: 10, openId: "local_reviewer", loginId: "reviewer", fullName: "리뷰어", name: "리뷰어", phone: "010-1000-0010", role: "user", reviewerAgreedAt: new Date(), address: addr });
+  users.set(11, { id: 11, openId: "local_r2", loginId: "r2", fullName: "리뷰어2", name: "리뷰어2", phone: "010-1000-0011", role: "user", reviewerAgreedAt: new Date(), address: addr });
 });
 
 describe("campaign management (admin)", () => {
@@ -226,6 +233,13 @@ describe("reviewer workflow", () => {
     const applied = await caller.participation.join({ campaignId });
     expect(applied?.status).toBe("applied");
 
+    // 실제 흐름: 검색 인증 → 구매 인증 → 리뷰 인증.
+    const searched = await caller.participation.submitSearchProof({
+      participationId: applied!.id,
+      proofUrl: "/manus-storage/search.png",
+    });
+    expect(searched?.status).toBe("searched");
+
     const purchased = await caller.participation.submitPurchaseProof({
       participationId: applied!.id,
       proofUrl: "/manus-storage/purchase.png",
@@ -263,7 +277,7 @@ describe("reviewer workflow", () => {
     const campaignId = await seedCampaign(1);
     const r1 = appRouter.createCaller(makeCtx(reviewer));
     await r1.participation.join({ campaignId });
-    const r2 = appRouter.createCaller(makeCtx({ id: 11, openId: "local_r2", role: "user" }));
+    const r2 = appRouter.createCaller(makeCtx({ id: 11, openId: "local_r2", role: "user", reviewerAgreedAt: new Date() }));
     await expect(r2.participation.join({ campaignId })).rejects.toThrow(/마감/);
   });
 });
