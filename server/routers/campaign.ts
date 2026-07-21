@@ -195,6 +195,36 @@ async function analyzeZipUnits(zip: JSZip, depth = 0): Promise<PacketUnit[]> {
  * 이미 패킷이 배정된 리뷰어는 건너뛰므로 반복 호출(가입 시 자동배정)에 안전하다.
  * 스토리지가 설정돼 있으면 패킷을 R2에 저장(`r2:<key>`), 아니면 레거시 base64로 저장한다.
  */
+/**
+ * 업로드된 사진 ZIP의 '리뷰어 1인분' 유닛 수를 분석해 반환한다. (패킷 배정 없이 개수만)
+ * ZIP이 없으면 0, ZIP을 열 수 없으면 예외. 참여 배정의 사진 정원 상한 확정에 쓰인다.
+ */
+export async function computePhotoUnitCount(
+  campaign: NonNullable<Awaited<ReturnType<typeof db.getCampaignById>>>,
+): Promise<number> {
+  if (!campaign.photoGuideZip) return 0;
+  const zip = await JSZip.loadAsync(await loadCampaignZipBuffer(campaign.photoGuideZip));
+  return (await analyzeZipUnits(zip)).length;
+}
+
+/**
+ * photoUnitCount가 아직 확정 안 됐으면 지금 분석해 저장하고 값을 반환한다.
+ * 캠페인 공개(open) 전 확정용 + 참여 배정 시 self-heal용. ZIP이 없거나 분석 실패면 0.
+ */
+export async function ensurePhotoUnitCount(
+  campaign: NonNullable<Awaited<ReturnType<typeof db.getCampaignById>>>,
+): Promise<number> {
+  if (campaign.photoUnitCount != null) return campaign.photoUnitCount;
+  try {
+    const n = await computePhotoUnitCount(campaign);
+    await db.updateCampaign(campaign.id, { photoUnitCount: n });
+    return n;
+  } catch (e) {
+    console.error("[photoUnitCount] 분석 실패:", e);
+    return 0; // 안전 처리(사진 정원 0) — 저장하지 않아 다음 기회에 재시도.
+  }
+}
+
 export async function assignPacketsForCampaign(
   campaign: NonNullable<Awaited<ReturnType<typeof db.getCampaignById>>>,
 ): Promise<{ assigned: number; units: number; participants: number }> {
@@ -364,7 +394,12 @@ export const campaignRouter = router({
       const { id, ...rest } = input;
       const existing = await db.getCampaignById(id);
       if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "캠페인을 찾을 수 없습니다." });
-      return db.updateCampaign(id, normalizeCampaignInput(rest));
+      const patch = normalizeCampaignInput(rest) as Partial<typeof rest> & { photoGuideZip?: string; photoUnitCount?: number | null };
+      // ZIP이 바뀌면 사진 인분 수는 무효 → null로 리셋해 다음 공개/참여 때 재확정한다.
+      if (patch.photoGuideZip !== undefined && patch.photoGuideZip !== existing.photoGuideZip) {
+        patch.photoUnitCount = null;
+      }
+      return db.updateCampaign(id, patch);
     }),
 
   // Business: presigned PUT URL 발급 → 브라우저가 큰 ZIP을 R2로 직접 업로드.
@@ -404,6 +439,10 @@ export const campaignRouter = router({
       // 리뷰어가 완료 후에도 배정 사진을 다시 내려받을 수 있어야 하기 때문(삭제하면 다운로드 시 NoSuchKey).
       // 실제 스토리지 정리는 캠페인 '삭제' 시(cleanupCampaignStorage)와 ZIP '재업로드' 시에만 수행한다.
       const updated = await db.updateCampaign(input.id, { status: input.status });
+      // 공개(open) 전에 사진 인분 수를 서버에서 확정 — 첫 참여가 상한을 우회하지 않도록.
+      if (input.status === "open" && existing.photoUnitCount == null && existing.photoGuideZip) {
+        await ensurePhotoUnitCount(existing).catch(e => console.error("[photoUnitCount] open 확정 실패:", e));
+      }
       // 첫 승인(pending → open)일 때만 카톡 단톡방 공지 큐에 적재. (모집 재개 반복 발송 방지)
       if (input.status === "open" && existing.status === "pending") {
         await db.enqueueKakaoAnnouncement(existing.id, buildCampaignAnnouncement(existing)).catch(e =>

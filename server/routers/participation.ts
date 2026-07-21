@@ -5,7 +5,7 @@ import { notifyReviewerChatSms } from "../chatNotify";
 import { storageExists } from "../storage";
 import * as db from "../db";
 import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
-import { assignPacketsForCampaign } from "./campaign";
+import { assignPacketsForCampaign, ensurePhotoUnitCount } from "./campaign";
 import { superviseGeneratedDraft, superviseManualDraft } from "../reviewSupervisor";
 import { distributeTodayStatus } from "../schedule";
 
@@ -166,9 +166,11 @@ export const participationRouter = router({
       // 리뷰 유형별 정원 (사진 → 글자 → 별점 순으로 선착순 자동배정)
       // 사진 정원은 업로드된 ZIP의 실제 인분 수(photoUnitCount)를 넘지 못한다 —
       // 예: 사진 10명 신청 + 7인분 업로드 → 사진 배정은 7명까지, 나머지는 글자/별점으로.
-      const photoCap = campaign.photoUnitCount == null
-        ? (campaign.photoCount ?? 0)
-        : Math.min(campaign.photoCount ?? 0, campaign.photoUnitCount);
+      // photoUnitCount가 아직 없으면(공개 전 미확정·레거시) 여기서 확정한다. ZIP이 없으면 0으로 처리해
+      // 사진이 준비되기 전에 사진 리뷰어가 정원을 넘겨 배정되는 것을 막는다.
+      const photoUnits =
+        campaign.photoUnitCount != null ? campaign.photoUnitCount : await ensurePhotoUnitCount(campaign);
+      const photoCap = Math.min(campaign.photoCount ?? 0, photoUnits);
       const caps = {
         photo: photoCap,
         text: campaign.textCount ?? 0,

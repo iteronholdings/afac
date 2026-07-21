@@ -1,0 +1,16 @@
+사진 정원 상한 완결: photoUnitCount 공개 전 확정 + join self-heal + ZIP없음=0
+
+Codex 지적(f5ff136 미완결) 대응 - photoUnitCount=null이면 사진 정원이 photoCount 전체로
+쓰여 상한이 우회되던 문제(ZIP 없음/최초 동시신청).
+
+- computePhotoUnitCount/ensurePhotoUnitCount 추가(ZIP 분석만, 패킷 배정과 분리).
+- setStatus pending->open 시 photoUnitCount를 서버에서 확정(공개 전 확정).
+- participation.join: photoUnitCount null이면 ensure로 즉시 확정(self-heal),
+  ZIP 없으면 0으로 처리 -> 사진 준비 전 photo 배정 우회 차단. photoCap=min(photoCount, 확정값).
+- campaign.update: ZIP 변경 시 photoUnitCount=null 리셋(스테일 방지).
+- 회귀 테스트 2건 추가: min(photoCount,photoUnitCount) 제한, ZIP없음(null)=사진정원0.
+  workflow mock에 유형별 정원·reviewType·검색인증 반영.
+
+테스트 29/29 통과, 타입체크 클린, 프로덕션 빌드 성공.
+
+Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>

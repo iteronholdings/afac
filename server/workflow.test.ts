@@ -16,6 +16,12 @@ type Campaign = {
   productPrice: number;
   commission: number;
   slots: number;
+  photoCount?: number;
+  textCount?: number;
+  starCount?: number;
+  photoUnitCount?: number | null;
+  photoGuideZip?: string | null;
+  schedule?: string | null;
   status: "open" | "closed";
   createdBy: number;
   createdAt: Date;
@@ -25,7 +31,9 @@ type Participation = {
   id: number;
   campaignId: number;
   userId: number;
-  status: "applied" | "purchased" | "reviewed" | "approved" | "paid" | "rejected";
+  status: "applied" | "searched" | "purchased" | "reviewed" | "approved" | "paid" | "rejected";
+  reviewType?: "photo" | "text" | "star" | null;
+  searchProofUrl?: string | null;
   purchaseProofUrl: string | null;
   reviewProofUrl: string | null;
   adminMemo: string | null;
@@ -68,6 +76,12 @@ vi.mock("./db", () => ({
       productPrice: data.productPrice ?? 0,
       commission: data.commission ?? 0,
       slots: data.slots ?? 1,
+      photoCount: data.photoCount ?? 0,
+      textCount: data.textCount ?? 0,
+      starCount: data.starCount ?? 0,
+      photoUnitCount: data.photoUnitCount ?? null,
+      photoGuideZip: data.photoGuideZip ?? null,
+      schedule: data.schedule ?? null,
       status: "open",
       createdBy: data.createdBy ?? 0,
       createdAt: new Date(),
@@ -102,6 +116,8 @@ vi.mock("./db", () => ({
       campaignId: data.campaignId!,
       userId: data.userId!,
       status: data.status ?? "applied",
+      reviewType: data.reviewType ?? null,
+      searchProofUrl: null,
       purchaseProofUrl: null,
       reviewProofUrl: null,
       adminMemo: null,
@@ -169,6 +185,7 @@ beforeEach(() => {
   const addr = "(12345) 서울 테스트로 1 (테스트빌딩), 101호";
   users.set(10, { id: 10, openId: "local_reviewer", loginId: "reviewer", fullName: "리뷰어", name: "리뷰어", phone: "010-1000-0010", role: "user", reviewerAgreedAt: new Date(), address: addr });
   users.set(11, { id: 11, openId: "local_r2", loginId: "r2", fullName: "리뷰어2", name: "리뷰어2", phone: "010-1000-0011", role: "user", reviewerAgreedAt: new Date(), address: addr });
+  users.set(12, { id: 12, openId: "local_r3", loginId: "r3", fullName: "리뷰어3", name: "리뷰어3", phone: "010-1000-0012", role: "user", reviewerAgreedAt: new Date(), address: addr });
 });
 
 describe("campaign management (admin)", () => {
@@ -210,6 +227,48 @@ describe("campaign management (admin)", () => {
   it("blocks anonymous users from listing campaigns", async () => {
     const pub = appRouter.createCaller(makeCtx(null));
     await expect(pub.campaign.listOpen()).rejects.toThrow();
+  });
+});
+
+describe("photo review capacity (photoUnitCount)", () => {
+  const r10 = { id: 10, openId: "local_reviewer", role: "user" as const, reviewerAgreedAt: new Date() };
+  const r11 = { id: 11, openId: "local_r2", role: "user" as const, reviewerAgreedAt: new Date() };
+  const r12 = { id: 12, openId: "local_r3", role: "user" as const, reviewerAgreedAt: new Date() };
+
+  it("사진 정원을 min(photoCount, photoUnitCount)로 제한한다", async () => {
+    const admin = appRouter.createCaller(makeCtx(adminUser));
+    // 사진 2 신청 + 실제 1인분 확정 → 사진은 1명까지, 나머지는 글자로.
+    const c = await admin.campaign.create({
+      title: "사진캠페인", keyword: "키워드", productPrice: 1000, commission: 100,
+      slots: 3, photoCount: 2, textCount: 1, starCount: 0, photoGuideZip: "r2:zip/x",
+    });
+    const id = c!.id;
+    campaigns.get(id)!.photoUnitCount = 1; // 서버가 확정한 인분 수(=1) 시뮬레이션
+
+    const p1 = await appRouter.createCaller(makeCtx(r10)).participation.join({ campaignId: id });
+    const p2 = await appRouter.createCaller(makeCtx(r11)).participation.join({ campaignId: id });
+    expect(p1?.reviewType).toBe("photo");   // 1인분 소진
+    expect(p2?.reviewType).toBe("text");    // 사진 정원 초과분은 글자로
+    // 세 번째는 글자 정원(1)도 차서 마감.
+    await expect(
+      appRouter.createCaller(makeCtx(r12)).participation.join({ campaignId: id }),
+    ).rejects.toThrow(/마감/);
+  });
+
+  it("ZIP이 없어 photoUnitCount 미확정(null)이면 사진 정원을 0으로 처리한다", async () => {
+    const admin = appRouter.createCaller(makeCtx(adminUser));
+    // 사진 2 신청인데 ZIP 없음(photoUnitCount=null, photoGuideZip 없음) → 사진 배정 0, 글자로.
+    const c = await admin.campaign.create({
+      title: "지픽없음", keyword: "키워드", productPrice: 1000, commission: 100,
+      slots: 3, photoCount: 2, textCount: 1, starCount: 0,
+    });
+    const id = c!.id;
+
+    const p1 = await appRouter.createCaller(makeCtx(r10)).participation.join({ campaignId: id });
+    expect(p1?.reviewType).toBe("text");    // 사진 우회 배정 없음
+    await expect(
+      appRouter.createCaller(makeCtx(r11)).participation.join({ campaignId: id }),
+    ).rejects.toThrow(/마감/);
   });
 });
 
