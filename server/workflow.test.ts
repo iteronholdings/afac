@@ -145,6 +145,11 @@ vi.mock("./db", () => ({
   listParticipationsByCampaign: async (campaignId: number) =>
     [...participations.values()].filter(p => p.campaignId === campaignId),
   countCampaignParticipantsByPhone: async () => 0,
+  clearAssignedPacketsForCampaign: async (campaignId: number) => {
+    for (const p of participations.values()) {
+      if (p.campaignId === campaignId) { p.reviewType = p.reviewType; }
+    }
+  },
   getUserById: async (id: number) => users.get(id),
   listAllUsers: async () => [...users.values()],
   setUserRole: async (id: number, role: "user" | "admin") => {
@@ -269,6 +274,27 @@ describe("photo review capacity (photoUnitCount)", () => {
     await expect(
       appRouter.createCaller(makeCtx(r11)).participation.join({ campaignId: id }),
     ).rejects.toThrow(/마감/);
+  });
+
+  it("ZIP 재업로드 시 photoUnitCount를 리셋해 이전 인분 수를 쓰지 않는다", async () => {
+    const admin = appRouter.createCaller(makeCtx(adminUser));
+    const c = await admin.campaign.create({
+      title: "재업로드", keyword: "키워드", productPrice: 1000, commission: 100,
+      slots: 3, photoCount: 2, textCount: 1, starCount: 0, photoGuideZip: "r2:old.zip",
+    });
+    const id = c!.id;
+    campaigns.get(id)!.photoUnitCount = 5; // 이전 ZIP의 (부풀려진) 인분 수
+
+    // 새 ZIP으로 재업로드 — 테스트 환경엔 스토리지가 없어 재분석은 실패(throw)하지만,
+    // 저장 시점에 photoUnitCount는 이미 null로 리셋돼 있어야 한다.
+    await expect(
+      admin.campaign.replacePhotoGuideZip({ campaignId: id, photoGuideZipKey: "new.zip", fileName: "new.zip" }),
+    ).rejects.toThrow();
+    expect(campaigns.get(id)!.photoUnitCount).toBeNull();   // 이전 5가 남으면 안 됨
+
+    // 재분석 실패 상태(null + 새 ZIP 열기 불가)에서 join → self-heal이 0으로 처리 → 사진 배정 0.
+    const p1 = await appRouter.createCaller(makeCtx(r10)).participation.join({ campaignId: id });
+    expect(p1?.reviewType).toBe("text");   // 이전 인분 수(5)를 썼다면 photo가 됐을 것
   });
 });
 

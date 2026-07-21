@@ -681,9 +681,15 @@ export const campaignRouter = router({
       if (!newZip) throw new TRPCError({ code: "BAD_REQUEST", message: "업로드된 ZIP이 없습니다." });
 
       // 이전 원본 ZIP + 이미 배정된 패킷을 R2에서 삭제하고, 배정을 초기화 → 새 ZIP으로 재배정.
+      // photoUnitCount는 새 ZIP 기준으로 무효 → null로 함께 원자적 리셋한다.
+      // (재분석 실패·분석 중 join이 끼면 이전 ZIP 인분 수로 사진 정원이 잘못 산정되는 것을 방지)
       await cleanupCampaignStorage(campaign.id, campaign.photoGuideZip);
       await db.clearAssignedPacketsForCampaign(campaign.id);
-      await db.updateCampaign(campaign.id, { photoGuideZip: newZip, photoGuideZipName: input.fileName });
+      await db.updateCampaign(campaign.id, {
+        photoGuideZip: newZip,
+        photoGuideZipName: input.fileName,
+        photoUnitCount: null,
+      });
 
       const fresh = await db.getCampaignById(campaign.id);
       return assignPacketsForCampaign(fresh!);
